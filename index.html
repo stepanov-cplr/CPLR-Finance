@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; base-uri 'none'; form-action 'none'">
+<title>Фінсистема ЦППР</title>
+<link rel="icon" href="logo.png">
+<style>
+:root{
+  --navy:#252868; --blue:#1C75BC; --grey:#E6E7E8;
+  --bg:#F4F5F8; --card:#FFFFFF; --ink:#1B1D3A; --muted:#5F6278; --line:#DEE0E6;
+  --plan:#8A6D1A; --plan-bg:#FFF4D6; --ok:#0D4F8B; --ok-bg:#DCEBFA; --paid:#1F7A4D; --paid-bg:#DDF2E6; --bad:#8A1C1C; --bad-bg:#FDECEC;
+  --r:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+[hidden]{display:none !important}
+.wrap{max-width:1100px;margin:0 auto;padding:0 12px}
+.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+
+header.top{background:var(--navy);color:#fff}
+header.top .wrap{display:flex;align-items:center;gap:12px;min-height:56px;padding-top:6px;padding-bottom:6px}
+header.top img{height:34px;width:auto;display:block}
+.brand{display:flex;flex-direction:column;line-height:1.15;margin-right:auto;min-width:0}
+.brand b{font-size:17px}
+.brand span{font-size:12px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.me{display:flex;align-items:center;gap:8px;font-size:13px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 14px;cursor:pointer;font-size:14px;min-height:38px}
+.btn:hover{border-color:var(--blue)}
+.btn.primary{background:var(--navy);color:#fff;border-color:var(--navy);font-weight:600}
+.btn.good{background:var(--paid);color:#fff;border-color:var(--paid);font-weight:600}
+.btn:disabled{opacity:.45;cursor:default}
+header.top .btn{background:transparent;color:#fff;border-color:rgba(255,255,255,.35);padding:6px 12px;min-height:32px}
+
+.gate{min-height:calc(100vh - 56px);display:grid;place-items:center;padding:24px 16px}
+.gate .box{background:var(--card);border-radius:16px;padding:32px 24px;max-width:420px;width:100%;text-align:center;box-shadow:0 10px 40px rgba(37,40,104,.08)}
+.gate img{height:64px;margin-bottom:12px}
+.gate h1{font-size:21px;margin:0 0 6px;color:var(--navy)}
+.gate p{color:var(--muted);margin:0 0 20px}
+.gate .msg{margin-top:16px;font-size:14px;padding:10px 12px;border-radius:10px;background:#FFF4E5;color:#7A4B00}
+.gate .msg.err{background:var(--bad-bg);color:var(--bad)}
+#gbtn{display:flex;justify-content:center;min-height:44px}
+
+nav.tabs{background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+nav.tabs .wrap{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+nav.tabs .wrap::-webkit-scrollbar{display:none}
+nav.tabs button{border:0;background:none;padding:13px 12px 11px;cursor:pointer;color:var(--muted);border-bottom:3px solid transparent;white-space:nowrap;font-weight:600}
+nav.tabs button[aria-selected="true"]{color:var(--navy);border-bottom-color:var(--blue)}
+
+main{padding:14px 0 110px}
+.bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.stepper{display:flex;align-items:center;background:#fff;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.stepper button{border:0;background:none;padding:8px 14px;cursor:pointer;font-size:17px;min-height:40px}
+.stepper b{padding:0 6px;min-width:128px;text-align:center}
+.seg{display:flex;background:#fff;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.seg button{border:0;background:none;padding:8px 14px;cursor:pointer;min-height:40px;font-size:14px}
+.seg button[aria-pressed="true"]{background:var(--navy);color:#fff}
+select.pick,input.pick{padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;min-height:40px;max-width:100%}
+input.pick{width:100%}
+
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px}
+.tile{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:10px 12px}
+.tile small{display:block;color:var(--muted);font-size:12px}
+.tile b{font-size:18px;font-variant-numeric:tabular-nums}
+.tile.side{border-left:4px solid #8E6BBF}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.filters select.pick{flex:1 1 150px;min-width:0}
+.sidetag{font-size:11.5px;background:#EFE8F8;color:#5B3A8C;border-radius:6px;padding:1px 7px;font-weight:600;white-space:nowrap}
+.sidenote{padding:8px 12px;font-size:13px;color:#5B3A8C;background:#F7F3FC;border-bottom:1px solid var(--line)}
+.empty.small{padding:14px 12px}
+.overtag{border:0;cursor:pointer;font-size:11.5px;background:var(--bad-bg);color:var(--bad);border-radius:6px;padding:2px 8px;font-weight:700;white-space:nowrap}
+.linecode{font-size:11.5px;color:var(--muted);white-space:nowrap}
+.linecode.over{color:var(--bad);font-weight:700}
+.linecode.none{color:#B7791F}
+.overblock{border-color:#E7B4B4}
+.overblock>h2{background:var(--bad-bg);color:var(--bad)}
+table.t tr.overrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
+table.t td[title]{max-width:260px}
+.addrow select[data-add="line"]{grid-column:1/-1}
+.rowtools select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;max-width:100%;background:#fff}
+.tile.plan{border-left:4px solid #D9B23C} .tile.ok{border-left:4px solid var(--blue)} .tile.paid{border-left:4px solid var(--paid)}
+
+.block{background:#fff;border:1px solid var(--line);border-radius:var(--r);margin-bottom:12px;overflow:hidden}
+.block>h2{font-size:16px;margin:0;padding:10px 12px;background:#F7F8FB;border-bottom:1px solid var(--line);color:var(--navy);display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.block>h2 small{color:var(--muted);font-weight:400;font-size:13px}
+.block>h2 .sum{margin-left:auto;font-variant-numeric:tabular-nums}
+.block .foot{display:flex;gap:8px;flex-wrap:wrap;padding:10px 12px;border-top:1px solid var(--line);background:#FBFBFD}
+.mine{font-size:11.5px;background:var(--ok-bg);color:var(--ok);border-radius:6px;padding:1px 7px;font-weight:600}
+
+.row,.rowhead{display:grid;grid-template-columns:minmax(0,1fr) 78px 108px;gap:4px 8px;align-items:center;padding:8px 12px;border-top:1px solid #F0F1F4}
+.rowhead{padding:6px 12px 0;border-top:0;font-size:11.5px;color:var(--muted);text-align:right}
+.rowhead+.row{border-top:0}
+.row .who{min-width:0}
+.row .who b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .who small{color:var(--muted);font-size:12.5px}
+.row input.h,.row input.s{width:100%;min-width:0;padding:8px 8px;border:1px solid var(--line);border-radius:10px;text-align:right;font-size:16px;background:#fff;font-variant-numeric:tabular-nums}
+.row input.h:focus,.row input.s:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 3px rgba(28,117,188,.15)}
+.row input.dirty{border-color:#D9B23C;background:#FFFBEA}
+.row .hh,.row .amt{text-align:right;font-variant-numeric:tabular-nums;padding-right:8px}
+.row .hh{color:var(--muted)}
+.st{display:inline-block;font-size:11.5px;border-radius:6px;padding:1px 7px;font-weight:600;white-space:nowrap}
+.st.plan{background:var(--plan-bg);color:var(--plan)} .st.ok{background:var(--ok-bg);color:var(--ok)} .st.paid{background:var(--paid-bg);color:var(--paid)}
+.rowtools{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--muted)}
+.rowtools input{padding:6px 8px;border:1px solid var(--line);border-radius:8px;width:92px;text-align:right}
+.rowtools label{display:flex;gap:4px;align-items:center}
+.linkbtn{border:0;background:none;padding:4px 0;color:var(--blue);cursor:pointer;font-size:13.5px}
+.linkbtn.danger{color:var(--bad)}
+.addrow{display:grid;grid-template-columns:minmax(0,1fr) 78px 108px;gap:8px;padding:10px 12px;border-top:1px dashed var(--line);background:#FBFBFD}
+.addrow .btn{grid-column:1/-1;justify-self:start}
+.addrow select,.addrow input{padding:8px;border:1px solid var(--line);border-radius:10px;min-width:0;background:#fff;font-size:15px}
+.addrow input{text-align:right}
+
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.t{border-collapse:separate;border-spacing:0;font-size:13.5px;width:100%}
+table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #EEF0F4;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+table.t thead th{background:#F7F8FB;color:var(--muted);font-size:12px;font-weight:600;border-bottom:1px solid var(--line)}
+table.t th:first-child,table.t td:first-child{text-align:left;position:sticky;left:0;background:#fff;border-right:1px solid var(--line);max-width:150px;overflow:hidden;text-overflow:ellipsis}
+table.t thead th:first-child{background:#F7F8FB}
+table.t tr.total td{font-weight:700;background:#F7F8FB;border-bottom:0}
+table.t td.z{color:#C3C7D1}
+table.t td.cur{background:#EEF4FC}
+table.t td.over{color:var(--bad);font-weight:700}
+.plink{border:0;background:none;padding:0;color:var(--navy);font:inherit;font-weight:600;cursor:pointer;text-align:left}
+.plink:hover{color:var(--blue);text-decoration:underline}
+.list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+.item{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;cursor:pointer;text-align:left;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.item:hover{border-color:var(--blue)}
+.item b{color:var(--navy)}
+.item span{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.legend{color:var(--muted);font-size:13px;margin:0 0 10px}
+.empty{padding:36px 16px;text-align:center;color:var(--muted)}
+.loading{padding:60px 16px;text-align:center;color:var(--muted)}
+.banner{background:var(--bad-bg);color:var(--bad);border-radius:10px;padding:12px 14px;margin:0 0 12px}
+.hint{background:#EEF4FC;color:#0D4F8B;border-radius:10px;padding:10px 12px;margin:0 0 12px;font-size:14px}
+
+.savebar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(37,40,104,.08);z-index:6}
+.savebar .wrap{display:flex;gap:10px;align-items:center;padding-top:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+.savebar span{margin-right:auto;font-size:14px;color:var(--muted)}
+.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:#fff;border-radius:999px;padding:9px 16px;font-size:14px;z-index:7;max-width:92vw;text-align:center}
+.toast.err{background:var(--bad)}
+
+@media (max-width:520px){
+  .me .who{display:none}
+  .brand span{display:none}
+  .row,.rowhead,.addrow{grid-template-columns:minmax(0,1fr) 68px 100px}
+  .stepper b{min-width:112px}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <img src="logo.png" alt="ЦППР">
+    <div class="brand"><b>Фінсистема ЦППР</b><span>Години, виплати, прогноз · лише для команди</span></div>
+    <div class="me" id="me" hidden>
+      <span class="who" id="meName"></span>
+      <button class="btn" id="refresh" type="button">Оновити</button>
+      <button class="btn" id="logout" type="button">Вийти</button>
+    </div>
+  </div>
+</header>
+
+<section class="gate" id="gate">
+  <div class="box">
+    <img src="logo.png" alt="">
+    <h1>Фінсистема ЦППР</h1>
+    <p>Внутрішня сторінка. Увійдіть акаунтом Google, з яким ви працюєте в ЦППР.</p>
+    <div id="gbtn"></div>
+    <div class="msg" id="gateMsg" hidden></div>
+  </div>
+</section>
+
+<div id="app" hidden>
+  <nav class="tabs" aria-label="Розділи">
+    <div class="wrap" role="tablist">
+      <button role="tab" data-tab="month" aria-selected="true">Місяць</button>
+      <button role="tab" data-tab="people" aria-selected="false">Люди</button>
+      <button role="tab" data-tab="projects" aria-selected="false">Проєкти</button>
+      <button role="tab" data-tab="year" aria-selected="false">Рік</button>
+    </div>
+  </nav>
+  <main class="wrap">
+    <div id="loading" class="loading">Завантажую дані…</div>
+    <div id="error" class="banner" hidden></div>
+    <section id="view" hidden></section>
+  </main>
+  <div class="savebar" id="savebar" hidden>
+    <div class="wrap">
+      <span id="saveInfo"></span>
+      <button class="btn" id="saveCancel" type="button">Скасувати</button>
+      <button class="btn primary" id="saveBtn" type="button">Зберегти</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="app.js?v=1.2.0"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
+</body>
+</html>
