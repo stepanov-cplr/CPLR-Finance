@@ -86,6 +86,10 @@ table.t thead th[data-dir="asc"]::after{content:" ▲";font-size:9px}
 table.t thead th[data-dir="desc"]::after{content:" ▼";font-size:9px}
 .item.person em{font-style:normal;font-size:12px;color:var(--muted);margin-left:6px}
 .item.person em.over{color:var(--bad);font-weight:700}
+.legend.keys{margin-top:-4px}
+.item span.above{color:var(--bad);font-weight:700}
+.item span.below{color:#7A5A00;font-weight:700}
+.legend .over{color:var(--bad);font-weight:700}
 table.t tr.hours td{color:var(--muted);background:#FBFBFD}
 .item.person{flex-wrap:wrap}
 .item.person small{flex-basis:100%;color:var(--muted);font-size:12px}
@@ -215,7 +219,7 @@ table.t td.over{color:var(--bad);font-weight:700}
 </div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="app.js?v=1.5.2"></script>
+<script src="app.js?v=1.5.3"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
 </body>
 </html>

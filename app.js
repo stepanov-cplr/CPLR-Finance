@@ -1,4 +1,5 @@
 /* Фінсистема ЦППР — сторінка. Даних і адрес команди тут немає: усе приходить із сервера після входу.
+   Версія 1.5.3 — 17.11.2026: пояснення кольорів у списку людей.
    Версія 1.5.2 — 17.11.2026: Офіс, Інтернет — витрати: без ставки, годин і залучення.
    Версія 1.5.1 — 17.11.2026: залучення — від реальної норми годин місяця.
    Версія 1.5.0 — 16.11.2026: сортування таблиць і списків, % залучення, примітка про зарплату.
@@ -438,7 +439,8 @@
       .sort(function (a, b) { return (isExpense(a) - isExpense(b)) || (key(b) - key(a)) || uk(a, b); });
     return '<div class="bar">' + yearSeg() + listSortSeg("people", [["name", "за прізвищем"], ["sum", "за сумою"], ["load", "за залученням"]]) + '</div>' +
       '<input class="pick" id="q" type="search" autocomplete="off" placeholder="Пошук за прізвищем" value="' + esc(S.q) + '" style="margin-bottom:12px">' +
-      (names.length ? '<p class="legend">Сума за ' + MONTHS[S.month - 1].toLowerCase() + ' ' + S.year + ' (разом зі стороннім), % залучення (години ÷ ' + norm(S.year, S.month) + ' год норми місяця) і рамки гонорару. Клік — картка людини.</p><div class="list">' + names.map(function (n) {
+      (names.length ? '<p class="legend">Сума за ' + MONTHS[S.month - 1].toLowerCase() + ' ' + S.year + ' (разом зі стороннім), % залучення (години ÷ ' + norm(S.year, S.month) + ' год норми місяця) і рамки гонорару «мін – макс». Клік — картка людини.</p>' +
+        '<p class="legend keys"><span class="below">жовтим</span> — сума за місяць нижча за мінімальний гонорар · <span class="above">червоним</span> — вища за максимальний · <span class="over">червоний %</span> — залучення понад 100% · без кольору — у межах рамок або рамок не задано</p><div class="list">' + names.map(function (n) {
         var p = personInfo(n), v = monthTotal(n, S.year, S.month), c = mmClass(p, v);
         var lp = isExpense(n) ? 0 : loadPct(monthHours(n, S.year, S.month), S.year, S.month);
         return '<button class="item person" type="button" data-act="person" data-v="' + esc(n) + '"><b>' + esc(n) + '</b><span class="' + c + '">' + (v ? money(v) : "–") + '</span>' +
