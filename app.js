@@ -1,4 +1,6 @@
 /* Фінсистема ЦППР — сторінка. Даних і адрес команди тут немає: усе приходить із сервера після входу.
+   Версія 1.5.1 — 17.11.2026: залучення — від реальної норми годин місяця.
+   Версія 1.5.0 — 16.11.2026: сортування таблиць і списків, % залучення, примітка про зарплату.
    Версія 1.4.0 — 16.11.2026: мін/макс гонорару і ставка за проєктами.
    Версія 1.3.0 — 16.11.2026: ролі «член правління» і «керівник проєкту».
    Версія 1.2.0 — 16.11.2026: бюджетні статті й перевищення.
@@ -15,10 +17,11 @@
   var ST = { plan: "План", ok: "Підтверджено", paid: "Оплачено" };
   var ST_CLASS = { "План": "plan", "Підтверджено": "ok", "Оплачено": "paid" };
   // Рядок реєстру: [id, рік, місяць, людина, проєкт, ставка, години, сума, статус, дата оплати, оформлення, коментар]
+  var NET_NOTE = "Зарплата — це чисті виплати, вже за вирахуванням податків; години для неї — з ЗП-розпису.";
   var R = { id: 0, year: 1, month: 2, person: 3, project: 4, rate: 5, hours: 6, sum: 7, status: 8, paid: 9, kind: 10, note: 11, line: 12 };
 
   var D = null;            // дані з сервера — лише в пам'яті сторінки
-  var S = { tab: "month", year: 0, month: 0, fLead: "", fProject: "", fPerson: "", person: "", project: "", q: "", open: {} };
+  var S = { sort: {}, listSort: { people: "name", projects: "sum" }, tab: "month", year: 0, month: 0, fLead: "", fProject: "", fPerson: "", person: "", project: "", q: "", open: {} };
   var dirty = {};          // id рядка → {mode: "hours"|"sum", hours, sum, rate}
   var busy = false;
 
@@ -289,6 +292,7 @@
       h += '<div class="hint">Впишіть години або гроші — друге порахується само за ставкою. Потім натисніть «Підтвердити години».</div>';
     }
     if (!list.length) return h + '<div class="empty">За цей місяць записів немає.</div>';
+    var hasNet = shown.some(function (r) { return r[R.kind] === "ЗП"; });
 
     list.forEach(function (code) {
       var p = project(code), rows = shown.filter(function (r) { return r[R.project] === code; })
@@ -314,6 +318,7 @@
       }
       h += '</div>';
     });
+    if (hasNet) h += '<p class="legend">' + NET_NOTE + '</p>';
     return h;
   }
 
@@ -338,7 +343,7 @@
   function rowHtml(r) {
     var id = r[R.id], d = dirty[id], edit = canEditRow(r), side = isSide(r[R.project]), v = live(r, d);
     var h = '<div class="row" data-id="' + id + '"><div class="who"><b>' + esc(r[R.person]) + '</b><small>' +
-      (r[R.rate] ? money(r[R.rate]) + " грн/год" : "без ставки") + (r[R.kind] === "ЗП" ? " · зарплата" : "") +
+      (r[R.rate] ? money(r[R.rate]) + " грн/год" : "без ставки") + (r[R.kind] === "ЗП" ? ' · <span title="' + esc(NET_NOTE) + '">зарплата, чиста</span>' : "") +
       (side ? "" : ' <span class="st ' + (ST_CLASS[r[R.status]] || "plan") + '">' + esc(r[R.status]) +
         (r[R.paid] ? " " + esc(r[R.paid].slice(8, 10) + "." + r[R.paid].slice(5, 7)) : "") + '</span>') +
       (r[R.note] ? " · " + esc(r[R.note]) : "") + lineNote(r) + '</small></div>';
@@ -410,19 +415,26 @@
           function (c) { return pr.filter(function (r) { return r[R.project] === c; }); }, "Проєкт", "project", sideTag,
           { rate: function (c) { return isSide(c) ? null : rateIn(S.person, c); }, mark: function (m, v) { return mmClass(pi, v); },
             after: '<tr class="hours"><td>Годин</td><td></td>' + hoursPer.map(function (v) { return '<td class="' + (v ? "" : "z") + '">' + (v ? hrs(v) : "–") + '</td>'; }).join("") +
-              '<td><b>' + hrs(hoursPer.reduce(function (a, b) { return a + b; }, 0)) + '</b></td></tr>' }) +
+              '<td><b>' + hrs(hoursPer.reduce(function (a, b) { return a + b; }, 0)) + '</b></td></tr>' +
+              '<tr class="hours"><td>Норма годин</td><td></td>' + hoursPer.map(function (v, i) { return '<td>' + norm(S.year, i + 1) + '</td>'; }).join("") + '<td>' + MSHORT.reduce(function (a, _, i) { return a + norm(S.year, i + 1); }, 0) + '</td></tr>' +
+              '<tr class="hours"><td>Залучення</td><td></td>' + hoursPer.map(function (v, i) { return loadCell(monthHours(S.person, S.year, i + 1), "", S.year, i + 1); }).join("") + '<td></td></tr>' }) +
+        '<p class="legend" style="padding:6px 12px 0">Залучення — години в проєктах ЦППР ÷ норма годин місяця (робочі дні × 8); понад 100% — червоним. ' + (pr.some(function (r) { return r[R.kind] === "ЗП"; }) ? NET_NOTE : "") + '</p>' +
         (pi.min || pi.max ? '<p class="legend" style="padding:6px 12px 0"><span class="below">жовтим</span> — місяць нижче мінімального гонорару, <span class="above">червоним</span> — вище максимального. Ураховано й заробіток на стороні.</p>' : "") +
 '</div>';
     }
     var tot = {};
     yr.forEach(function (r) { tot[r[R.person]] = (tot[r[R.person]] || 0) + (r[R.sum] || 0); });
-    var q = S.q.toLowerCase();
-    var names = Object.keys(tot).filter(function (n) { return !q || n.toLowerCase().indexOf(q) >= 0; }).sort(uk);
-    return '<div class="bar">' + yearSeg() + '</div>' +
+    var q = S.q.toLowerCase(), ls = S.listSort.people;
+    var key = function (n) { return ls === "sum" ? monthTotal(n, S.year, S.month) : ls === "load" ? monthHours(n, S.year, S.month) : 0; };
+    var names = Object.keys(tot).filter(function (n) { return !q || n.toLowerCase().indexOf(q) >= 0; })
+      .sort(function (a, b) { return (key(b) - key(a)) || uk(a, b); });
+    return '<div class="bar">' + yearSeg() + listSortSeg("people", [["name", "за прізвищем"], ["sum", "за сумою"], ["load", "за залученням"]]) + '</div>' +
       '<input class="pick" id="q" type="search" autocomplete="off" placeholder="Пошук за прізвищем" value="' + esc(S.q) + '" style="margin-bottom:12px">' +
-      (names.length ? '<p class="legend">Сума за ' + MONTHS[S.month - 1].toLowerCase() + ' ' + S.year + ' (разом зі стороннім) і рамки гонорару. Клік — картка людини.</p><div class="list">' + names.map(function (n) {
+      (names.length ? '<p class="legend">Сума за ' + MONTHS[S.month - 1].toLowerCase() + ' ' + S.year + ' (разом зі стороннім), % залучення (години ÷ ' + norm(S.year, S.month) + ' год норми місяця) і рамки гонорару. Клік — картка людини.</p><div class="list">' + names.map(function (n) {
         var p = personInfo(n), v = monthTotal(n, S.year, S.month), c = mmClass(p, v);
+        var lp = loadPct(monthHours(n, S.year, S.month), S.year, S.month);
         return '<button class="item person" type="button" data-act="person" data-v="' + esc(n) + '"><b>' + esc(n) + '</b><span class="' + c + '">' + (v ? money(v) : "–") + '</span>' +
+          (lp ? '<em class="' + (lp > 100 ? "over" : "") + '">' + lp + '%</em>' : "") +
           (p.min || p.max ? '<small>' + (p.min ? money(p.min) : "–") + ' – ' + (p.max ? money(p.max) : "–") + '</small>' : "") + '</button>';
       }).join("") + '</div>' : '<div class="empty">Нікого не знайдено.</div>');
   }
@@ -441,6 +453,23 @@
   function monthTotal(person, y, m) {
     return D.rows.reduce(function (a, r) { return a + (r[R.person] === person && r[R.year] === y && r[R.month] === m ? r[R.sum] || 0 : 0); }, 0);
   }
+  // Години людини за місяць у роботі через ЦППР (без заробітку на стороні)
+  function monthHours(person, y, m) {
+    return D.rows.reduce(function (a, r) { return a + (r[R.person] === person && r[R.year] === y && r[R.month] === m && !isSide(r[R.project]) ? r[R.hours] || 0 : 0); }, 0);
+  }
+  // Норма годин місяця: з аркуша «Норма годин», інакше робочі дні × 8 (свята під час воєнного стану — робочі)
+  function norm(y, m) {
+    var n = D.norms && D.norms[y + "-" + m];
+    if (n) return n;
+    var d = new Date(y, m - 1, 1), c = 0;
+    while (d.getMonth() === m - 1) { if (d.getDay() % 6) c++; d.setDate(d.getDate() + 1); }
+    return c * 8;
+  }
+  function loadPct(h, y, m) { return h ? Math.round(h / (m ? norm(y, m) : y) * 100) : 0; }
+  function loadCell(h, extra, y, m) {
+    var p = loadPct(h, y, m);
+    return '<td class="' + (!p ? "z" : p > 100 ? "over" : "") + (extra ? " " + extra : "") + '">' + (p ? p + "%" : "–") + '</td>';
+  }
   function mmClass(p, v) {
     if (!v) return "";
     if (p.min && v < p.min) return "below";
@@ -450,6 +479,11 @@
   function mmText(p) {
     if (!p.min && !p.max) return "";
     return "гонорар на місяць: мін " + (p.min ? money(p.min) : "–") + " · макс " + (p.max ? money(p.max) : "–");
+  }
+  function listSortSeg(list, opts) {
+    return '<div class="seg">' + opts.map(function (o) {
+      return '<button type="button" data-act="lsort" data-l="' + list + '" data-v="' + o[0] + '" aria-pressed="' + (S.listSort[list] === o[0]) + '">' + o[1] + '</button>';
+    }).join("") + '</div>';
   }
   function tilesWrap(st, withSide) { return '<div style="padding:10px 12px 0">' + tiles(st, withSide) + '</div>'; }
 
@@ -484,8 +518,9 @@
     }
     var tot = {};
     yr.forEach(function (r) { tot[r[R.project]] = (tot[r[R.project]] || 0) + (r[R.sum] || 0); });
-    var codes = Object.keys(tot).sort(function (a, b) { return (isSide(a) - isSide(b)) || (isMine(b) - isMine(a)) || (tot[b] - tot[a]); });
-    return '<div class="bar">' + yearSeg() + '</div>' + (codes.length ? '<div class="list">' + codes.map(function (c) {
+    var byName = S.listSort.projects === "name";
+    var codes = Object.keys(tot).sort(function (a, b) { return (isSide(a) - isSide(b)) || (byName ? uk(a, b) : (isMine(b) - isMine(a)) || (tot[b] - tot[a])); });
+    return '<div class="bar">' + yearSeg() + listSortSeg("projects", [["name", "за назвою"], ["sum", "за сумою"]]) + '</div>' + (codes.length ? '<div class="list">' + codes.map(function (c) {
       return '<button class="item" type="button" data-act="project" data-v="' + esc(c) + '"><b>' + esc(c) + (isMine(c) ? ' <span class="mine">мій</span>' : "") + sideTag(c) +
         '</b><span>' + money(tot[c]) + '</span></button>';
     }).join("") + '</div>' : '<div class="empty">За ' + S.year + ' рік записів немає.</div>');
@@ -511,12 +546,69 @@
       (S.fPerson ? "" : '<div class="block"><h2>За людьми <small>' + S.year + ' рік, грн, через ЦППР</small></h2>' +
         matrix(Object.keys(own.reduce(function (o, r) { o[r[R.person]] = 1; return o; }, {})).sort(uk),
           function (n) { return own.filter(function (r) { return r[R.person] === n; }); }, "Людина", "person") + '</div>') +
+      loadBlock(own) +
       (side.length ? '<div class="block"><h2>Зароблено на стороні <small>не через ЦППР</small></h2>' +
         matrix(Object.keys(sideNames).sort(uk), function (n) { return side.filter(function (r) { return r[R.person] === n; }); }, "Людина", "person") + '</div>' : "") +
       '<div class="block"><h2>Що оплачено і що попереду</h2><div class="tw"><table class="t"><thead><tr><th>Статус</th>' +
       MSHORT.map(function (m) { return '<th>' + m + '</th>'; }).join("") + '<th>Разом</th></tr></thead><tbody>' +
       line("Оплачено", per.paid) + line("Підтверджено", per.ok) + line("План", per.plan) + '</tbody></table></div></div>' +
-      '<p class="legend">Суми — нарахування людям за місяцями, без податків і без інших витрат проєктів.</p>';
+      '<p class="legend">Суми — виплати людям за місяцями, без інших витрат проєктів. ' + NET_NOTE + ' Клік по заголовку стовпця — сортування.</p>';
+  }
+
+  // Залучення людей за місяцями року
+  function loadBlock(own) {
+    var names = {}; own.forEach(function (r) { names[r[R.person]] = 1; });
+    var list = Object.keys(names).filter(function (n) { return n !== "Офіс" && n !== "Інтернет"; }).sort(uk);
+    if (!list.length) return "";
+    var yearNorm = MSHORT.reduce(function (a, _, i) { return a + norm(S.year, i + 1); }, 0);
+    var over = 0, body = list.map(function (n) {
+      var per = MSHORT.map(function (_, i) { return monthHours(n, S.year, i + 1); });
+      var mx = Math.max.apply(null, per.map(function (h, i) { return loadPct(h, S.year, i + 1); }));
+      if (mx > 100) over++;
+      return '<tr><td><button class="plink" type="button" data-act="person" data-v="' + esc(n) + '">' + esc(n) + '</button></td>' +
+        per.map(function (h, i) { return loadCell(h, isCur(S.year, i + 1) ? "cur" : "", S.year, i + 1); }).join("") + loadCell(per.reduce(function (a, b) { return a + b; }, 0), "", yearNorm) + '</tr>';
+    }).join("");
+    body += '<tr class="hours"><td>Норма годин</td>' + MSHORT.map(function (_, i) { return '<td>' + norm(S.year, i + 1) + '</td>'; }).join("") + '<td>' + yearNorm + '</td></tr>';
+    return '<div class="block"><h2>Залучення людей <small>години в проєктах ЦППР ÷ норма годин місяця (робочі дні × 8)' + (over ? ' · понад 100% хоча б раз: ' + over : "") + '</small></h2>' +
+      '<div class="tw"><table class="t"><thead><tr><th>Людина</th>' + MSHORT.map(function (m) { return '<th>' + m + '</th>'; }).join("") + '<th>За рік</th></tr></thead><tbody>' + body + '</tbody></table></div></div>';
+  }
+
+  // ── Сортування таблиць: клік по заголовку стовпця ─────
+  function cellVal(td) {
+    var t = (td ? td.textContent : "").replace(/[\u00A0\s]/g, "").replace("−", "-");
+    if (t === "–" || t === "") return { n: true, v: -Infinity };
+    var m = t.match(/^-?\d+(?:[.,]\d+)?/);
+    if (m && /^-?\d+(?:[.,]\d+)?(%|\/.*)?$/.test(t)) return { n: true, v: parseFloat(m[0].replace(",", ".")) };
+    return { n: false, v: (td.textContent || "").trim() };
+  }
+  function tableKey(i) { return S.tab + "|" + (S.person || S.project || "") + "|" + i; }
+  function sortTable(tbl, col, dir) {
+    var tb = tbl.tBodies[0]; if (!tb) return;
+    var rows = Array.prototype.slice.call(tb.rows), fixed = rows.filter(function (r) { return /\b(total|hours)\b/.test(r.className); });
+    var data = rows.filter(function (r) { return fixed.indexOf(r) < 0; });
+    data.sort(function (a, b) {
+      var x = cellVal(a.cells[col]), y = cellVal(b.cells[col]);
+      var c = x.n && y.n ? x.v - y.v : String(x.v).localeCompare(String(y.v), "uk");
+      return dir * (c || 0);
+    });
+    data.concat(fixed).forEach(function (r) { tb.appendChild(r); });
+    Array.prototype.forEach.call(tbl.tHead.rows[0].cells, function (th, i) { th.setAttribute("data-dir", i === col ? (dir > 0 ? "asc" : "desc") : ""); });
+  }
+  function applySorts() {
+    Array.prototype.forEach.call($("view").querySelectorAll("table.t"), function (tbl, i) {
+      if (!tbl.tHead) return;
+      tbl.setAttribute("data-key", tableKey(i));
+      var s = S.sort[tableKey(i)];
+      if (s) sortTable(tbl, s.col, s.dir);
+    });
+  }
+  function onHeadClick(th) {
+    var tbl = th.closest("table"), key = tbl.getAttribute("data-key"), col = th.cellIndex, cur = S.sort[key];
+    // перший клік: числа — від більшого, текст — за абеткою
+    var first = cellVal(tbl.tBodies[0] && tbl.tBodies[0].rows[0] && tbl.tBodies[0].rows[0].cells[col]).n ? -1 : 1;
+    var dir = cur && cur.col === col ? -cur.dir : first;
+    S.sort[key] = { col: col, dir: dir };
+    sortTable(tbl, col, dir);
   }
 
   // ── Малювання ─────────────────────────────────────────
@@ -527,6 +619,7 @@
     useCache = {};
     var v = $("view");
     v.innerHTML = S.tab === "month" ? viewMonth() : S.tab === "people" ? viewPeople() : S.tab === "projects" ? viewProjects() : viewYear();
+    applySorts();
     saveBar();
   }
   function saveBar() {
@@ -591,6 +684,8 @@
   }
 
   function onClick(e) {
+    var th = e.target.closest("table.t thead th");
+    if (th && !e.target.closest("[data-act]")) { onHeadClick(th); return; }
     var b = e.target.closest("[data-act]");
     if (!b || busy) return;
     var act = b.getAttribute("data-act"), v = b.getAttribute("data-v");
@@ -604,6 +699,7 @@
       dirty = {}; S.fProject = ""; S.fPerson = ""; S.fLead = act === "mineonly" ? (D.me.lead || "") : ""; render();
     }
     else if (act === "year") { S.year = +b.getAttribute("data-y"); render(); }
+    else if (act === "lsort") { S.listSort[b.getAttribute("data-l")] = v; render(); }
     else if (act === "person") { S.tab = "people"; S.person = v; render(); window.scrollTo(0, 0); }
     else if (act === "project") { S.tab = "projects"; S.project = v; render(); window.scrollTo(0, 0); }
     else if (act === "back") { S.person = ""; S.project = ""; render(); }

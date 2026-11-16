@@ -80,6 +80,12 @@ table.t tr.total td.below{background:#FFF1C9;color:#7A5A00}
 table.t tr.total td.above{background:var(--bad-bg);color:var(--bad)}
 table.t td.below,table.t td.above{border-radius:0;padding:7px 8px}
 table.t td.rate{color:var(--muted)}
+table.t thead th{cursor:pointer;user-select:none}
+table.t thead th:hover{color:var(--blue)}
+table.t thead th[data-dir="asc"]::after{content:" ▲";font-size:9px}
+table.t thead th[data-dir="desc"]::after{content:" ▼";font-size:9px}
+.item.person em{font-style:normal;font-size:12px;color:var(--muted);margin-left:6px}
+.item.person em.over{color:var(--bad);font-weight:700}
 table.t tr.hours td{color:var(--muted);background:#FBFBFD}
 .item.person{flex-wrap:wrap}
 .item.person small{flex-basis:100%;color:var(--muted);font-size:12px}
@@ -209,7 +215,7 @@ table.t td.over{color:var(--bad);font-weight:700}
 </div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="app.js?v=1.4.0"></script>
+<script src="app.js?v=1.5.1"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
 </body>
 </html>
