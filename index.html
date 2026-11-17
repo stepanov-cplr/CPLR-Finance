@@ -136,6 +136,16 @@ table.t td[title]{max-width:260px}
 .note small{color:var(--muted);white-space:nowrap}
 .noteedit{grid-column:1/-1;display:grid;gap:6px}
 table.t td.hasnote{position:relative;cursor:help}
+.mxbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px 0;font-size:13px;color:var(--muted)}
+.mxbar span{flex:1;min-width:200px}
+table.mxt td.ed{padding:3px 4px;vertical-align:top}
+table.mxt input.mx{width:84px;padding:5px 6px;border:1px solid var(--line);border-radius:7px;text-align:right;font:inherit;font-variant-numeric:tabular-nums;background:#fff}
+table.mxt input.mx:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 3px rgba(28,117,188,.15)}
+table.mxt td.ed.dirty input.mx{border-color:#D9B23C;background:#FFFBEA}
+table.mxt small.mh{display:block;text-align:right;font-size:11px;color:var(--muted);min-height:13px;padding-right:2px}
+table.mxt small.mh.frac{color:#C05621;font-weight:700}
+table.mxt td.ro{color:var(--muted)}
+select.mxadd{padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;max-width:220px}
 table.t td.hasnote::after{content:"";position:absolute;top:0;right:0;border-top:7px solid #E0A100;border-left:7px solid transparent}
 ul.notes{list-style:none;margin:0;padding:4px 12px 10px}
 ul.notes li{padding:7px 0;border-top:1px solid #F0F1F4;font-size:13.5px}
@@ -233,7 +243,7 @@ table.t td.over{color:var(--bad);font-weight:700}
 </div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="app.js?v=1.6.3"></script>
+<script src="app.js?v=1.7.0"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
 </body>
 </html>

@@ -1,4 +1,6 @@
 /* Фінсистема ЦППР — сторінка. Даних і адрес команди тут немає: усе приходить із сервера після входу.
+   Версія 1.7.0 — 17.11.2026: правка сум у картці людини й картці проєкту (кнопка «Редагувати суми»): години видно в клітинці,
+     неціле число годин — помаранчевим; підсумки, рамки гонорару й залучення перераховуються одразу.
    Версія 1.6.3 — 17.11.2026: у «Році» блок «Перевищення бюджету» — унизу сторінки.
    Версія 1.6.2 — 17.11.2026: коментарі в «Році», картці людини й картці проєкту — позначка в клітинці і перелік під таблицею.
    Версія 1.6.1 — 17.11.2026: коментарі до виплат — видно під рядком (хто й коли), пише кожен, хто вносить години в проєкті.
@@ -27,8 +29,8 @@
   var R = { id: 0, year: 1, month: 2, person: 3, project: 4, rate: 5, hours: 6, sum: 7, status: 8, paid: 9, kind: 10, note: 11, line: 12, noteBy: 13, noteAt: 14 };
 
   var D = null;            // дані з сервера — лише в пам'яті сторінки
-  var S = { sort: {}, listSort: { people: "name", projects: "sum" }, tab: "month", year: 0, month: 0, fLead: "", fProject: "", fPerson: "", person: "", project: "", q: "", open: {}, noteOpen: {} };
-  var dirty = {};          // id рядка → {mode: "hours"|"sum", hours, sum, rate}
+  var S = { sort: {}, listSort: { people: "name", projects: "sum" }, tab: "month", year: 0, month: 0, fLead: "", fProject: "", fPerson: "", person: "", project: "", q: "", open: {}, noteOpen: {}, mxOn: false, mxAdd: {} };
+  var dirty = {}, mx = {};          // dirty: id рядка → {mode: "hours"|"sum", hours, sum, rate}; mx: «рік|місяць|людина|проєкт» → сума з картки
   var busy = false;
 
   function $(id) { return document.getElementById(id); }
@@ -52,7 +54,7 @@
   function setToken(t) { try { t ? sessionStorage.setItem(TOKEN_KEY, t) : sessionStorage.removeItem(TOKEN_KEY); } catch (e) {} }
 
   function showGate(msg, isErr) {
-    D = null; dirty = {};
+    D = null; dirty = {}; mx = {};
     $("view").innerHTML = "";
     $("app").hidden = true; $("me").hidden = true; $("gate").hidden = false; $("savebar").hidden = true;
     var m = $("gateMsg");
@@ -275,17 +277,22 @@
   // opt.rate(назва) — ставка, грн/год, окремою колонкою; opt.mark(місяць, сума) — клас для клітинки підсумку
   function matrix(names, pick, firstHead, linkAct, tag, opt) {
     opt = opt || {};
+    var ed = opt.edit && S.mxOn ? opt.edit : null;
     var head = '<tr><th>' + esc(firstHead) + '</th>' + (opt.rate ? '<th>Ставка</th>' : "") + MSHORT.map(function (m) { return '<th>' + m + '</th>'; }).join("") + '<th>Разом</th></tr>';
     var tot = new Array(12).fill(0), body = "";
     names.forEach(function (n) {
       var rs = pick(n), per = new Array(12).fill(0), notes = MSHORT.map(function () { return []; });
       rs.forEach(function (r) { per[r[R.month] - 1] += r[R.sum] || 0; if (r[R.note]) notes[r[R.month] - 1].push(noteLabel(r, n)); });
-      if (!per.some(Boolean)) return;
+      if (!per.some(Boolean) && !ed) return;
       per.forEach(function (v, i) { tot[i] += v; });
       var rt = opt.rate ? opt.rate(n) : null;
       body += '<tr><td>' + (linkAct ? '<button class="plink" type="button" data-act="' + linkAct + '" data-v="' + esc(n) + '">' + esc(n) + '</button>' : esc(n)) + (tag ? tag(n) : "") + '</td>' +
         (opt.rate ? '<td class="rate">' + (rt ? money(rt) : "–") + '</td>' : "") +
-        per.map(function (v, i) { return cell(v, S.year, i + 1, notes[i]); }).join("") + '<td><b>' + money(per.reduce(function (a, b) { return a + b; }, 0)) + '</b></td></tr>';
+        per.map(function (v, i) {
+          if (!ed) return cell(v, S.year, i + 1, notes[i]);
+          var person = ed.person || n, project = ed.project || n;
+          return mxCell(person, project, i + 1, rs.filter(function (r) { return r[R.month] === i + 1; })[0]);
+        }).join("") + '<td><b>' + money(per.reduce(function (a, b) { return a + b; }, 0)) + '</b></td></tr>';
     });
     if (!body) return '<div class="empty">За ' + S.year + ' рік записів немає.</div>';
     body += '<tr class="total"><td>Разом</td>' + (opt.rate ? '<td></td>' : "") + tot.map(function (v, i) {
@@ -294,7 +301,7 @@
     }).join("") +
       '<td>' + money(tot.reduce(function (a, b) { return a + b; }, 0)) + '</td></tr>';
     if (opt.after) body += opt.after;
-    return '<div class="tw"><table class="t"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>';
+    return '<div class="tw"><table class="t' + (ed ? " mxt" : "") + '"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>';
   }
 
   // ── Вкладка «Місяць» ──────────────────────────────────
@@ -446,28 +453,28 @@
   function viewPeople() {
     var yr = rowsOf(function (r) { return r[R.year] === S.year; });
     if (S.person) {
-      var pr = yr.filter(function (r) { return r[R.person] === S.person; });
-      var pi = personInfo(S.person);
+      var pr = (S.mxOn ? liveRows() : D.rows).filter(function (r) { return r[R.year] === S.year && r[R.person] === S.person; });
+      var pi = personInfo(S.person), extra = S.mxOn ? S.mxAdd["person|" + S.person] || [] : [];
       if (isExpense(S.person)) {
-        var ecodes = {}; pr.forEach(function (r) { ecodes[r[R.project]] = 1; });
+        var ecodes = {}; pr.forEach(function (r) { ecodes[r[R.project]] = 1; }); extra.forEach(function (c) { ecodes[c] = 1; });
         return '<div class="bar"><button class="btn" type="button" data-act="back">‹ Усі люди</button>' + yearSeg() + '</div>' +
-          '<div class="block"><h2>' + esc(S.person) + ' <small>витрати · ' + S.year + ' рік, грн</small></h2>' + tilesWrap(byStatus(pr)) +
-          matrix(Object.keys(ecodes).sort(uk), function (c) { return pr.filter(function (r) { return r[R.project] === c; }); }, "Проєкт", "project") + '</div>' + notesBlock(pr, "person");
+          '<div class="block"><h2>' + esc(S.person) + ' <small>витрати · ' + S.year + ' рік, грн</small></h2>' + tilesWrap(byStatus(pr)) + mxBar("person", ecodes) +
+          matrix(Object.keys(ecodes).sort(uk), function (c) { return pr.filter(function (r) { return r[R.project] === c; }); }, "Проєкт", "project", null, { edit: { person: S.person } }) + '</div>' + notesBlock(pr, "person");
       }
-      var codes = {}; pr.forEach(function (r) { codes[r[R.project]] = 1; });
-      var hoursPer = new Array(12).fill(0);
-      pr.forEach(function (r) { hoursPer[r[R.month] - 1] += r[R.hours] || 0; });
+      var codes = {}; pr.forEach(function (r) { codes[r[R.project]] = 1; }); extra.forEach(function (c) { codes[c] = 1; });
+      var hoursPer = new Array(12).fill(0), loadPer = new Array(12).fill(0);
+      pr.forEach(function (r) { hoursPer[r[R.month] - 1] += r[R.hours] || 0; if (!isSide(r[R.project])) loadPer[r[R.month] - 1] += r[R.hours] || 0; });
       return '<div class="bar"><button class="btn" type="button" data-act="back">‹ Усі люди</button>' + yearSeg() + '</div>' +
         '<div class="block"><h2>' + esc(S.person) + ' <small>' + S.year + ' рік, грн</small>' +
         (mmText(pi) ? '<span class="mm">' + mmText(pi) + '</span>' : "") + '</h2>' +
-        tilesWrap(byStatus(pr), true) +
+        tilesWrap(byStatus(pr), true) + mxBar("person", codes) +
         matrix(Object.keys(codes).sort(function (a, b) { return (isSide(a) - isSide(b)) || uk(a, b); }),
           function (c) { return pr.filter(function (r) { return r[R.project] === c; }); }, "Проєкт", "project", sideTag,
-          { rate: function (c) { return isSide(c) ? null : rateIn(S.person, c); }, mark: function (m, v) { return mmClass(pi, v); },
+          { rate: function (c) { return isSide(c) ? null : rateIn(S.person, c); }, mark: function (m, v) { return mmClass(pi, v); }, edit: { person: S.person },
             after: '<tr class="hours"><td>Годин</td><td></td>' + hoursPer.map(function (v) { return '<td class="' + (v ? "" : "z") + '">' + (v ? hrs(v) : "–") + '</td>'; }).join("") +
               '<td><b>' + hrs(hoursPer.reduce(function (a, b) { return a + b; }, 0)) + '</b></td></tr>' +
               '<tr class="hours"><td>Норма годин</td><td></td>' + hoursPer.map(function (v, i) { return '<td>' + norm(S.year, i + 1) + '</td>'; }).join("") + '<td>' + MSHORT.reduce(function (a, _, i) { return a + norm(S.year, i + 1); }, 0) + '</td></tr>' +
-              '<tr class="hours"><td>Залучення</td><td></td>' + hoursPer.map(function (v, i) { return loadCell(monthHours(S.person, S.year, i + 1), "", S.year, i + 1); }).join("") + '<td></td></tr>' }) +
+              '<tr class="hours"><td>Залучення</td><td></td>' + loadPer.map(function (v, i) { return loadCell(v, "", S.year, i + 1); }).join("") + '<td></td></tr>' }) +
         '<p class="legend" style="padding:6px 12px 0">Залучення — години в проєктах ЦППР ÷ норма годин місяця (робочі дні × 8); понад 100% — червоним. ' + (pr.some(function (r) { return r[R.kind] === "ЗП"; }) ? NET_NOTE : "") + '</p>' +
         (pi.min || pi.max ? '<p class="legend" style="padding:6px 12px 0"><span class="below">жовтим</span> — місяць нижче мінімального гонорару, <span class="above">червоним</span> — вище максимального. Ураховано й заробіток на стороні, і виплати з інших періодів.</p>' : "") +
 '</div>' + notesBlock(pr, "person");
@@ -529,6 +536,69 @@
     if (p.max && v > p.max) return "above";
     return "";
   }
+  // ── Правка сум у картках ──────────────────────────────
+  function mxKey(y, m, person, project) { return [y, m, person, project].join("|"); }
+  function mxParse(k) { var a = k.split("|"); return { year: +a[0], month: +a[1], person: a[2], project: a.slice(3).join("|") }; }
+  function mxRow(p) { return D.rows.filter(function (r) { return r[R.year] === p.year && r[R.month] === p.month && r[R.person] === p.person && r[R.project] === p.project; })[0]; }
+  // Рядки з урахуванням незбережених сум (для підсумків, рамок гонорару й залучення в картці)
+  function liveRows() {
+    if (!Object.keys(mx).length) return D.rows;
+    var seen = {}, out = D.rows.map(function (r) {
+      var k = mxKey(r[R.year], r[R.month], r[R.person], r[R.project]);
+      if (mx[k] === undefined || seen[k]) return r;
+      seen[k] = 1;
+      var c = r.slice(), v = String(mx[k]).trim() === "" ? 0 : parseNum(mx[k]);
+      c[R.sum] = isFinite(v) ? v : 0;
+      if (c[R.rate] && isFinite(v)) c[R.hours] = round2(v / c[R.rate]);
+      return c;
+    });
+    var nid = -1;
+    Object.keys(mx).forEach(function (k) {
+      if (seen[k]) return;
+      var p = mxParse(k), v = parseNum(mx[k]);
+      if (!(v > 0)) return;
+      var rate = isExpense(p.person) || isSide(p.project) ? null : rateIn(p.person, p.project) || personInfo(p.person).rate || null;
+      out.push([nid--, p.year, p.month, p.person, p.project, rate, rate ? round2(v / rate) : null, v, ST.plan, "", "", "", "", "", ""]);
+    });
+    return out;
+  }
+  function canEditCell(person, project, r) { return r ? (r[R.id] < 0 ? canEditProject(project) : canEditRow(r)) : canEditProject(project); }
+  function canMxAny() { return D.me.role !== "viewer" && (canAll() || mine().length > 0 || D.me.role === "board"); }
+  function mxHoursText(sumV, rate) {
+    if (!rate || !(sumV > 0)) return { t: "", frac: false };
+    var h = round2(sumV / rate);
+    return { t: hrs(h) + " год", frac: Math.abs(h - Math.round(h)) > 0.001 };
+  }
+  // Клітинка для правки: сума + години під нею (неціле число годин — помаранчевим)
+  function mxCell(person, project, m, r) {
+    var k = mxKey(S.year, m, person, project);
+    if (!canEditCell(person, project, r)) {
+      return '<td class="ro' + (r && r[R.status] === ST.paid ? " paid" : "") + '" title="' + (r && r[R.status] === ST.paid ? "Оплачено — змінює Інеса" : "Не ваш проєкт") + '">' + (r && r[R.sum] ? money(r[R.sum]) : "–") + '</td>';
+    }
+    var real = mxRow({ year: S.year, month: m, person: person, project: project });
+    var orig = real ? sumStr(real[R.sum]) : "";
+    var v = mx[k] !== undefined ? mx[k] : orig;
+    var rate = isExpense(person) || isSide(project) ? null : (real && real[R.rate]) || rateIn(person, project) || personInfo(person).rate || null;
+    var ht = mxHoursText(parseNum(v), rate);
+    return '<td class="ed' + (mx[k] !== undefined ? " dirty" : "") + '"><input class="mx" type="text" inputmode="decimal" autocomplete="off" data-k="' + esc(k) + '" data-o="' + esc(orig) + '" data-rate="' + (rate || "") + '" value="' + esc(v) + '" aria-label="' + esc(person + ", " + project + ", " + MSHORT[m - 1]) + '">' +
+      '<small class="mh' + (ht.frac ? " frac" : "") + '"' + (ht.frac ? ' title="Неціле число годин"' : "") + '>' + ht.t + '</small></td>';
+  }
+  function mxBar(kind, have) {
+    if (!canMxAny()) return "";
+    return '<div class="mxbar">' + (S.mxOn
+      ? '<span>Правка сум: впишіть гривні — години рахуються за ставкою. ' + (canAll() ? "Можна й минулі, й оплачені місяці." : "Оплачене змінює Інеса.") + '</span>' + mxAddRow(kind, have || {}) + '<button class="btn" type="button" data-act="mxoff">Готово</button>'
+      : '<button class="btn" type="button" data-act="mxon">Редагувати суми</button>') + '</div>';
+  }
+  function mxAddRow(kind, have) {
+    var opts;
+    if (kind === "person") opts = D.projects.filter(function (p) { return p.active && canEditProject(p.code) && !have[p.code]; }).map(function (p) { return p.code; });
+    else opts = D.people.filter(function (p) { return p.active && !have[p.name]; }).map(function (p) { return p.name; });
+    if (kind === "project" && !canEditProject(S.project)) return "";
+    if (!opts.length) return "";
+    return '<select class="mxadd" data-mxadd="' + kind + '" aria-label="Додати"><option value="">+ ' + (kind === "person" ? "додати проєкт" : "додати людину") + '…</option>' +
+      opts.sort(uk).map(function (o) { return '<option>' + esc(o) + '</option>'; }).join("") + '</select>';
+  }
+
   function mmText(p) {
     if (!p.min && !p.max) return "";
     return "гонорар на місяць: мін " + (p.min ? money(p.min) : "–") + " · макс " + (p.max ? money(p.max) : "–");
@@ -545,13 +615,14 @@
     var yr = rowsOf(function (r) { return r[R.year] === S.year; });
     if (S.project) {
       var code = S.project, p = project(code);
-      var pr = yr.filter(function (r) { return r[R.project] === code; });
+      var pr = (S.mxOn ? liveRows() : D.rows).filter(function (r) { return r[R.year] === S.year && r[R.project] === code; });
       var names = {}; pr.forEach(function (r) { names[r[R.person]] = 1; });
+      if (S.mxOn) (S.mxAdd["project|" + code] || []).forEach(function (n) { names[n] = 1; });
       var h = '<div class="bar"><button class="btn" type="button" data-act="back">‹ Усі проєкти</button>' + yearSeg() + '</div>' +
         '<div class="block"><h2>' + esc(code) + sideTag(code) + (p.leads.length ? ' <small>керівник: ' + esc(p.leads.join(", ")) + '</small>' : "") +
-        ' <small>' + S.year + ' рік, грн</small></h2>' + tilesWrap(byStatus(pr), true) +
+        ' <small>' + S.year + ' рік, грн</small></h2>' + tilesWrap(byStatus(pr), true) + (canEditProject(code) || canAll() ? mxBar("project", names) : "") +
         matrix(Object.keys(names).sort(uk), function (n) { return pr.filter(function (r) { return r[R.person] === n; }); }, "Людина", "person", null,
-          { rate: function (n) { return isSide(code) || isExpense(n) ? null : rateIn(n, code); } }) + '</div>' + notesBlock(pr, "project") + linesTable(code);
+          { rate: function (n) { return isSide(code) || isExpense(n) ? null : rateIn(n, code); }, edit: { project: code } }) + '</div>' + notesBlock(pr, "project") + linesTable(code);
       var bs = D.budgets.filter(function (b) { return b.project === code; });
       if (bs.length) {
         h += '<div class="block"><h2>Бюджет на людину <small>план і факт разом</small></h2><div class="tw"><table class="t"><thead><tr><th>Людина</th><th>Період</th><th>Бюджет</th><th>Використано</th><th>Залишок</th></tr></thead><tbody>';
@@ -654,7 +725,7 @@
   }
   function applySorts() {
     Array.prototype.forEach.call($("view").querySelectorAll("table.t"), function (tbl, i) {
-      if (!tbl.tHead) return;
+      if (!tbl.tHead || tbl.classList.contains("mxt")) return; // у правці рядки не переставляємо
       tbl.setAttribute("data-key", tableKey(i));
       var s = S.sort[tableKey(i)];
       if (s) sortTable(tbl, s.col, s.dir);
@@ -662,6 +733,7 @@
   }
   function onHeadClick(th) {
     var tbl = th.closest("table"), key = tbl.getAttribute("data-key"), col = th.cellIndex, cur = S.sort[key];
+    if (tbl.classList.contains("mxt")) return;
     // перший клік: числа — від більшого, текст — за абеткою
     var first = cellVal(tbl.tBodies[0] && tbl.tBodies[0].rows[0] && tbl.tBodies[0].rows[0].cells[col]).n ? -1 : 1;
     var dir = cur && cur.col === col ? -cur.dir : first;
@@ -680,10 +752,11 @@
     applySorts();
     saveBar();
   }
+  function nDirty() { return Object.keys(dirty).length + Object.keys(mx).length; }
   function saveBar() {
-    var n = Object.keys(dirty).length;
+    var n = nDirty();
     $("savebar").hidden = !n;
-    $("saveInfo").textContent = n ? "Змінено рядків: " + n : "";
+    $("saveInfo").textContent = n ? (Object.keys(mx).length && !Object.keys(dirty).length ? "Змінено клітинок: " : "Змінено рядків: ") + n : "";
     $("saveBtn").disabled = busy;
   }
   var toastTimer = 0;
@@ -693,7 +766,7 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { t.hidden = true; }, isErr ? 6000 : 2600);
   }
-  function leaveOk() { return !Object.keys(dirty).length || confirm("Є незбережені зміни. Продовжити без збереження?"); }
+  function leaveOk() { return !nDirty() || confirm("Є незбережені зміни. Продовжити без збереження?"); }
 
   // ── Дії ───────────────────────────────────────────────
   function run(promise, okMsg) {
@@ -713,6 +786,35 @@
   }
 
   function saveDirty() {
+    return saveMonth().then(function (ok) { return ok ? saveMx() : false; });
+  }
+  // Зміни з картки людини чи проєкту: існуючий рядок — нова сума; порожня клітинка — новий рядок;
+  // стерли суму — Інеса й адміни вилучають рядок (якщо не оплачений), інші ставлять 0
+  function saveMx() {
+    var keys = Object.keys(mx);
+    if (!keys.length) return Promise.resolve(true);
+    var rows = [], removeIds = [], bad = "";
+    keys.forEach(function (k) {
+      var p = mxParse(k), r = mxRow(p), v = String(mx[k]).trim(), n = v === "" ? 0 : parseNum(v);
+      if (!(n >= 0)) { bad = p.person + ", " + p.project + ", " + MSHORT[p.month - 1] + ": сума має бути числом"; return; }
+      if (r) {
+        if (!n && canAll() && r[R.status] !== ST.paid) removeIds.push(r[R.id]);
+        else rows.push({ id: r[R.id], sum: n });
+      } else if (n) rows.push({ year: p.year, month: p.month, person: p.person, project: p.project, sum: n });
+    });
+    if (bad) { toast(bad, true); return Promise.resolve(false); }
+    var chain = rows.length ? run(api("save", { rows: rows })) : Promise.resolve({ ok: true });
+    return chain.then(function (res) {
+      if (!res) return false;
+      return removeIds.length ? run(api("remove", { ids: removeIds })) : res;
+    }).then(function (res) {
+      if (!res) return false;
+      mx = {}; toast("Збережено"); render();
+      return true;
+    });
+  }
+
+  function saveMonth() {
     var ids = Object.keys(dirty);
     if (!ids.length) return Promise.resolve(true);
     var rows = [], bad = "";
@@ -730,11 +832,33 @@
       rows.push(o);
     });
     if (bad) { toast(bad, true); return Promise.resolve(false); }
-    return run(api("save", { rows: rows }), "Збережено").then(function (res) {
+    return run(api("save", { rows: rows }), Object.keys(mx).length ? "" : "Збережено").then(function (res) {
       if (!res) return false;
-      dirty = {}; render();
+      dirty = {}; if (!Object.keys(mx).length) render();
       return true;
     });
+  }
+
+  // Ввід у клітинку картки: пам'ятаємо суму, години під клітинкою — одразу
+  function mxInput(t) {
+    var k = t.getAttribute("data-k"), v = t.value.trim(), o = t.getAttribute("data-o");
+    if (v === o) delete mx[k]; else mx[k] = v;
+    var ht = mxHoursText(parseNum(v), +t.getAttribute("data-rate") || 0), sm = t.parentNode.querySelector(".mh");
+    if (sm) { sm.textContent = ht.t; sm.classList.toggle("frac", ht.frac); sm.title = ht.frac ? "Неціле число годин" : ""; }
+    t.parentNode.classList.toggle("dirty", mx[k] !== undefined);
+    saveBar();
+  }
+  // Після виходу з клітинки — перерахувати підсумки, не загубивши курсор і прокрутку
+  function mxRerender() {
+    setTimeout(function () {
+      var a = document.activeElement, k = a && a.classList && a.classList.contains("mx") ? a.getAttribute("data-k") : null;
+      var tw = document.querySelector("table.mxt") && document.querySelector("table.mxt").parentNode, sl = tw ? tw.scrollLeft : 0, sy = window.scrollY;
+      render();
+      var tw2 = document.querySelector("table.mxt") && document.querySelector("table.mxt").parentNode;
+      if (tw2) tw2.scrollLeft = sl;
+      window.scrollTo(0, sy);
+      if (k) Array.prototype.forEach.call(document.querySelectorAll("input.mx"), function (el) { if (el.getAttribute("data-k") === k) { el.focus(); try { el.select(); } catch (x) {} } });
+    }, 0);
   }
 
   function monthRows(code, status) {
@@ -751,16 +875,24 @@
       var m = S.month + (act === "next" ? 1 : -1), y = S.year;
       if (m < 1) { m = 12; y--; } if (m > 12) { m = 1; y++; }
       if (!leaveOk()) return;
-      dirty = {}; S.open = {}; S.noteOpen = {}; S.month = m; S.year = y; render();
+      dirty = {}; mx = {}; S.open = {}; S.noteOpen = {}; S.month = m; S.year = y; render();
     } else if (act === "nofilter" || act === "mineonly") {
       if (!leaveOk()) return;
-      dirty = {}; S.fProject = ""; S.fPerson = ""; S.fLead = act === "mineonly" ? (D.me.lead || "") : ""; render();
+      dirty = {}; mx = {}; S.fProject = ""; S.fPerson = ""; S.fLead = act === "mineonly" ? (D.me.lead || "") : ""; render();
     }
-    else if (act === "year") { S.year = +b.getAttribute("data-y"); render(); }
+    else if (act === "year") { if (Object.keys(mx).length && !leaveOk()) return; mx = {}; S.mxAdd = {}; S.year = +b.getAttribute("data-y"); render(); }
     else if (act === "lsort") { S.listSort[b.getAttribute("data-l")] = v; render(); }
-    else if (act === "person") { S.tab = "people"; S.person = v; render(); window.scrollTo(0, 0); }
-    else if (act === "project") { S.tab = "projects"; S.project = v; render(); window.scrollTo(0, 0); }
-    else if (act === "back") { S.person = ""; S.project = ""; render(); }
+    else if (act === "person" || act === "project" || act === "back") {
+      if (Object.keys(mx).length && !leaveOk()) return;
+      mx = {}; S.mxOn = false; S.mxAdd = {};
+      if (act === "person") { S.tab = "people"; S.person = v; } else if (act === "project") { S.tab = "projects"; S.project = v; } else { S.person = ""; S.project = ""; }
+      render(); if (act !== "back") window.scrollTo(0, 0);
+    }
+    else if (act === "mxon") { S.mxOn = true; render(); }
+    else if (act === "mxoff") {
+      if (Object.keys(mx).length && !confirm("Є незбережені суми. Вийти з правки без збереження?")) return;
+      mx = {}; S.mxOn = false; S.mxAdd = {}; render();
+    }
     else if (act === "more") { var id = +b.closest(".row").getAttribute("data-id"); S.open[id] = !S.open[id]; render(); }
     else if (act === "note") { var nid = +b.closest(".row").getAttribute("data-id"); S.noteOpen[nid] = !S.noteOpen[nid]; render(); var ta = document.querySelector('.row[data-id="' + nid + '"] textarea'); if (ta) ta.focus(); }
     else if (act === "notesave") {
@@ -804,6 +936,7 @@
 
   function onInput(e) {
     var t = e.target;
+    if (t.classList && t.classList.contains("mx")) { mxInput(t); return; }
     if (t.id === "q") { S.q = t.value; var pos = t.selectionStart; render(); var q = $("q"); if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (x) {} } return; }
     var f = t.getAttribute("data-f"), rowEl = t.closest(".row");
     if (!f || !rowEl || f === "status" || f === "line") return;
@@ -829,9 +962,15 @@
 
   function onChange(e) {
     var t = e.target;
+    if (t.classList && t.classList.contains("mx")) { mxRerender(); return; }
+    if (t.getAttribute("data-mxadd")) {
+      var kk = t.getAttribute("data-mxadd") + "|" + (S.person || S.project);
+      if (t.value) { S.mxAdd[kk] = (S.mxAdd[kk] || []).concat(t.value); render(); }
+      return;
+    }
     if (t.id === "fLead" || t.id === "fProject" || t.id === "fPerson") {
       if (!leaveOk()) { render(); return; }
-      dirty = {};
+      dirty = {}; mx = {};
       S[t.id] = t.value;
       render();
       return;
@@ -858,21 +997,22 @@
     $("view").addEventListener("keydown", function (e) {
       var c = e.target.classList;
       if (e.key === "Enter" && c && (c.contains("h") || c.contains("s"))) { e.preventDefault(); saveDirty(); }
+      if (e.key === "Enter" && c && c.contains("mx")) { e.preventDefault(); e.target.blur(); }
     });
     Array.prototype.forEach.call(document.querySelectorAll('nav.tabs button[role="tab"]'), function (b) {
       b.addEventListener("click", function () {
         if (!leaveOk()) return;
-        dirty = {}; S.tab = b.getAttribute("data-tab"); S.person = ""; S.project = ""; render(); window.scrollTo(0, 0);
+        dirty = {}; mx = {}; S.mxOn = false; S.mxAdd = {}; S.tab = b.getAttribute("data-tab"); S.person = ""; S.project = ""; render(); window.scrollTo(0, 0);
       });
     });
     $("saveBtn").addEventListener("click", function () { if (!busy) saveDirty(); });
-    $("saveCancel").addEventListener("click", function () { dirty = {}; render(); });
+    $("saveCancel").addEventListener("click", function () { dirty = {}; mx = {}; render(); });
     $("refresh").addEventListener("click", function () {
       if (!leaveOk()) return;
-      dirty = {}; load();
+      dirty = {}; mx = {}; load();
     });
     $("logout").addEventListener("click", function () { signOut(); });
-    window.addEventListener("beforeunload", function (e) { if (Object.keys(dirty).length) { e.preventDefault(); e.returnValue = ""; } });
+    window.addEventListener("beforeunload", function (e) { if (nDirty()) { e.preventDefault(); e.returnValue = ""; } });
     if (window.google && google.accounts) initGsi();
     if (token()) load(); else showGate();
   });
