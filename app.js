@@ -1,4 +1,5 @@
 /* Фінсистема ЦППР — сторінка. Даних і адрес команди тут немає: усе приходить із сервера після входу.
+   Версія 1.6.3 — 17.11.2026: у «Році» блок «Перевищення бюджету» — унизу сторінки.
    Версія 1.6.2 — 17.11.2026: коментарі в «Році», картці людини й картці проєкту — позначка в клітинці і перелік під таблицею.
    Версія 1.6.1 — 17.11.2026: коментарі до виплат — видно під рядком (хто й коли), пише кожен, хто вносить години в проєкті.
    Версія 1.6.0 — 17.11.2026: «З інших періодів» — окрема позначка й плитка (входять у суму людини і в «Разом через ЦППР»).
@@ -594,7 +595,7 @@
         '<td><b>' + money(arr.reduce(function (a, b) { return a + b; }, 0)) + '</b></td></tr>';
     }
     var overCodes = {}; own.forEach(function (r) { overCodes[r[R.project]] = 1; });
-    return '<div class="bar">' + yearSeg() + '</div>' + filterBar(allYear) + tiles(byStatus(yr)) + overBlock(Object.keys(overCodes).sort(uk)) +
+    return '<div class="bar">' + yearSeg() + '</div>' + filterBar(allYear) + tiles(byStatus(yr)) +
       '<div class="block"><h2>За проєктами <small>' + S.year + ' рік, грн</small></h2>' +
       matrix(Object.keys(codes).sort(uk), function (c) { return own.filter(function (r) { return r[R.project] === c; }); }, "Проєкт", "project") + '</div>' +
       (S.fPerson ? "" : '<div class="block"><h2>За людьми <small>' + S.year + ' рік, грн, через ЦППР</small></h2>' +
@@ -608,7 +609,7 @@
       '<div class="block"><h2>Що оплачено і що попереду</h2><div class="tw"><table class="t"><thead><tr><th>Статус</th>' +
       MSHORT.map(function (m) { return '<th>' + m + '</th>'; }).join("") + '<th>Разом</th></tr></thead><tbody>' +
       line("Оплачено", per.paid) + line("Підтверджено", per.ok) + line("План", per.plan) + '</tbody></table></div></div>' +
-      notesBlock(yr) +
+      notesBlock(yr) + overBlock(Object.keys(overCodes).sort(uk)) +
       '<p class="legend">Суми — виплати людям за місяцями, без інших витрат проєктів. ' + NET_NOTE + ' Клітинка з жовтим кутиком — є коментар (наведіть мишку або див. перелік «Коментарі»). Клік по заголовку стовпця — сортування.</p>';
   }
 
