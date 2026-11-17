@@ -1,4 +1,7 @@
 /* Фінсистема ЦППР — сторінка. Даних і адрес команди тут немає: усе приходить із сервера після входу.
+   Версія 1.6.2 — 17.11.2026: коментарі в «Році», картці людини й картці проєкту — позначка в клітинці і перелік під таблицею.
+   Версія 1.6.1 — 17.11.2026: коментарі до виплат — видно під рядком (хто й коли), пише кожен, хто вносить години в проєкті.
+   Версія 1.6.0 — 17.11.2026: «З інших періодів» — окрема позначка й плитка (входять у суму людини і в «Разом через ЦППР»).
    Версія 1.5.3 — 17.11.2026: пояснення кольорів у списку людей.
    Версія 1.5.2 — 17.11.2026: Офіс, Інтернет — витрати: без ставки, годин і залучення.
    Версія 1.5.1 — 17.11.2026: залучення — від реальної норми годин місяця.
@@ -20,10 +23,10 @@
   var ST_CLASS = { "План": "plan", "Підтверджено": "ok", "Оплачено": "paid" };
   // Рядок реєстру: [id, рік, місяць, людина, проєкт, ставка, години, сума, статус, дата оплати, оформлення, коментар]
   var NET_NOTE = "Зарплата — це чисті виплати, вже за вирахуванням податків; години для неї — з ЗП-розпису.";
-  var R = { id: 0, year: 1, month: 2, person: 3, project: 4, rate: 5, hours: 6, sum: 7, status: 8, paid: 9, kind: 10, note: 11, line: 12 };
+  var R = { id: 0, year: 1, month: 2, person: 3, project: 4, rate: 5, hours: 6, sum: 7, status: 8, paid: 9, kind: 10, note: 11, line: 12, noteBy: 13, noteAt: 14 };
 
   var D = null;            // дані з сервера — лише в пам'яті сторінки
-  var S = { sort: {}, listSort: { people: "name", projects: "sum" }, tab: "month", year: 0, month: 0, fLead: "", fProject: "", fPerson: "", person: "", project: "", q: "", open: {} };
+  var S = { sort: {}, listSort: { people: "name", projects: "sum" }, tab: "month", year: 0, month: 0, fLead: "", fProject: "", fPerson: "", person: "", project: "", q: "", open: {}, noteOpen: {} };
   var dirty = {};          // id рядка → {mode: "hours"|"sum", hours, sum, rate}
   var busy = false;
 
@@ -116,17 +119,21 @@
   function isMine(code) { return mine().indexOf(code) >= 0; }
   function project(code) { return D.projects.filter(function (p) { return p.code === code; })[0] || { code: code, leads: [], active: false, side: false }; }
   function isSide(code) { return !!project(code).side; }
+  // «З інших періодів» — виплати ЦППР за роботу в інших місяцях: як стороннє — без підтвердження й оплати і без годин залучення
+  function isPrior(code) { return !!project(code).prior; }
   function isLead() { return D.me.role === "board" || D.me.role === "pm"; }
   function canEditProject(code) { return canAll() || (D.me.role === "board" && (isMine(code) || isSide(code))) || (D.me.role === "pm" && isMine(code)); }
   function canEditRow(r) { return canAll() || (canEditProject(r[R.project]) && r[R.status] !== ST.paid); }
+  // коментар — і до оплаченого, якщо людина вносить години в цьому проєкті
+  function canNote(r) { return canAll() || canEditProject(r[R.project]); }
 
   // ── Допоміжне для даних ───────────────────────────────
   function rowsOf(f) { return D.rows.filter(f); }
   function sum(rows) { return rows.reduce(function (a, r) { return a + (r[R.sum] || 0); }, 0); }
-  // Виплати ЦППР за статусами; заробіток на стороні — окремо
+  // Виплати ЦППР за статусами; заробіток на стороні й виплати з інших періодів — окремо
   function byStatus(rows) {
-    var o = { plan: 0, ok: 0, paid: 0, side: 0 };
-    rows.forEach(function (r) { o[isSide(r[R.project]) ? "side" : (ST_CLASS[r[R.status]] || "plan")] += r[R.sum] || 0; });
+    var o = { plan: 0, ok: 0, paid: 0, side: 0, prior: 0 };
+    rows.forEach(function (r) { o[isPrior(r[R.project]) ? "prior" : isSide(r[R.project]) ? "side" : (ST_CLASS[r[R.status]] || "plan")] += r[R.sum] || 0; });
     return o;
   }
   function years() {
@@ -230,11 +237,12 @@
   // ── Спільні шматки розмітки ───────────────────────────
   // withSide: у «Разом» входить і заробіток на стороні (картка людини)
   function tiles(st, withSide) {
-    var cplr = st.plan + st.ok + st.paid;
+    var cplr = st.plan + st.ok + st.paid + (st.prior || 0);
     return '<div class="tiles">' +
       '<div class="tile plan"><small>План</small><b>' + money(st.plan) + '</b></div>' +
       '<div class="tile ok"><small>Підтверджено керівником</small><b>' + money(st.ok) + '</b></div>' +
       '<div class="tile paid"><small>Оплачено</small><b>' + money(st.paid) + '</b></div>' +
+      (st.prior ? '<div class="tile prior"><small>З інших періодів</small><b>' + money(st.prior) + '</b></div>' : "") +
       (st.side ? '<div class="tile side"><small>Зароблено на стороні</small><b>' + money(st.side) + '</b></div>' : "") +
       '<div class="tile total"><small>' + (withSide && st.side ? "Разом зі стороннім, грн" : "Разом через ЦППР, грн") + '</small><b>' + money(cplr + (withSide ? st.side : 0)) + '</b></div></div>';
   }
@@ -243,11 +251,25 @@
       return '<button type="button" data-act="year" data-y="' + y + '" aria-pressed="' + (y === S.year) + '">' + y + '</button>';
     }).join("") + '</div>';
   }
-  function cell(v, y, m) {
-    var c = (v ? "" : "z") + (isCur(y, m) ? " cur" : "");
-    return '<td class="' + c.trim() + '">' + (v ? money(v) : "–") + '</td>';
+  function cell(v, y, m, notes) {
+    var c = (v ? "" : "z") + (isCur(y, m) ? " cur" : "") + (notes && notes.length ? " hasnote" : "");
+    return '<td class="' + c.trim() + '"' + (notes && notes.length ? ' title="' + esc(notes.join("\n\n")) + '"' : "") + '>' + (v ? money(v) : "–") + '</td>';
   }
-  function sideTag(code) { return isSide(code) ? ' <span class="sidetag">на стороні</span>' : ""; }
+  // Коментарі за рік: перелік під таблицею (на телефоні підказки клітинок не видно). hide — яку назву не повторювати
+  function notesBlock(rows, hide) {
+    var list = rows.filter(function (r) { return r[R.note]; }).sort(function (a, b) {
+      return a[R.month] - b[R.month] || uk(a[R.project], b[R.project]) || uk(a[R.person], b[R.person]);
+    });
+    if (!list.length) return "";
+    return '<div class="block notesblock"><h2>Коментарі <small>' + S.year + ' рік · ' + list.length + '</small></h2><ul class="notes">' + list.map(function (r) {
+      var what = [hide === "project" ? "" : r[R.project], hide === "person" ? "" : r[R.person]].filter(String).join(" · ");
+      var when = r[R.noteAt] ? String(r[R.noteAt]).slice(8, 10) + "." + String(r[R.noteAt]).slice(5, 7) : "";
+      return '<li><span class="nm">' + MSHORT[r[R.month] - 1] + '</span> <b>' + esc(what) + '</b> <span class="nsum">' + money(r[R.sum]) + '</span>' +
+        '<div class="note">' + esc(r[R.note]) + (r[R.noteBy] || when ? '<small> — ' + esc([r[R.noteBy], when].filter(String).join(", ")) + '</small>' : "") + '</div></li>';
+    }).join("") + '</ul></div>';
+  }
+  function noteLabel(r, n) { return [r[R.project], r[R.person]].filter(function (x) { return x !== n; }).join(" · ") + ": " + r[R.note]; }
+  function sideTag(code) { return isPrior(code) ? ' <span class="sidetag prior">з інших періодів</span>' : isSide(code) ? ' <span class="sidetag">на стороні</span>' : ""; }
   // Таблиця «рядки × 12 місяців»
   // opt.rate(назва) — ставка, грн/год, окремою колонкою; opt.mark(місяць, сума) — клас для клітинки підсумку
   function matrix(names, pick, firstHead, linkAct, tag, opt) {
@@ -255,14 +277,14 @@
     var head = '<tr><th>' + esc(firstHead) + '</th>' + (opt.rate ? '<th>Ставка</th>' : "") + MSHORT.map(function (m) { return '<th>' + m + '</th>'; }).join("") + '<th>Разом</th></tr>';
     var tot = new Array(12).fill(0), body = "";
     names.forEach(function (n) {
-      var rs = pick(n), per = new Array(12).fill(0);
-      rs.forEach(function (r) { per[r[R.month] - 1] += r[R.sum] || 0; });
+      var rs = pick(n), per = new Array(12).fill(0), notes = MSHORT.map(function () { return []; });
+      rs.forEach(function (r) { per[r[R.month] - 1] += r[R.sum] || 0; if (r[R.note]) notes[r[R.month] - 1].push(noteLabel(r, n)); });
       if (!per.some(Boolean)) return;
       per.forEach(function (v, i) { tot[i] += v; });
       var rt = opt.rate ? opt.rate(n) : null;
       body += '<tr><td>' + (linkAct ? '<button class="plink" type="button" data-act="' + linkAct + '" data-v="' + esc(n) + '">' + esc(n) + '</button>' : esc(n)) + (tag ? tag(n) : "") + '</td>' +
         (opt.rate ? '<td class="rate">' + (rt ? money(rt) : "–") + '</td>' : "") +
-        per.map(function (v, i) { return cell(v, S.year, i + 1); }).join("") + '<td><b>' + money(per.reduce(function (a, b) { return a + b; }, 0)) + '</b></td></tr>';
+        per.map(function (v, i) { return cell(v, S.year, i + 1, notes[i]); }).join("") + '<td><b>' + money(per.reduce(function (a, b) { return a + b; }, 0)) + '</b></td></tr>';
     });
     if (!body) return '<div class="empty">За ' + S.year + ' рік записів немає.</div>';
     body += '<tr class="total"><td>Разом</td>' + (opt.rate ? '<td></td>' : "") + tot.map(function (v, i) {
@@ -305,7 +327,8 @@
         (lineUse(code).over.length ? ' <button class="overtag" type="button" data-act="project" data-v="' + esc(code) + '">перевищення бюджету: ' + lineUse(code).over.length + '</button>' : "") +
         (p.leads.length ? ' <small>керівник: ' + esc(p.leads.join(", ")) + '</small>' : "") +
         '<span class="sum">' + money(sum(rows)) + '</span></h2>';
-      if (p.side) h += '<div class="sidenote">Зароблене не через ЦППР. Зараховується до загальної виплати людини.</div>';
+      if (p.prior) h += '<div class="sidenote">Виплати за роботу в інших періодах. Зараховуються до загальної виплати людини; підтвердження й оплати тут немає.</div>';
+      else if (p.side) h += '<div class="sidenote">Зароблене не через ЦППР. Зараховується до загальної виплати людини.</div>';
       if (!rows.length) h += '<div class="empty small">Ще нікого не внесено.</div>';
       else h += '<div class="rowhead"><span></span><span>години</span><span>гривні</span></div>';
       rows.forEach(function (r) { h += rowHtml(r); });
@@ -349,13 +372,14 @@
       (ex ? "витрати" : r[R.rate] ? money(r[R.rate]) + " грн/год" : "без ставки") + (r[R.kind] === "ЗП" ? ' · <span title="' + esc(NET_NOTE) + '">зарплата, чиста</span>' : "") +
       (side ? "" : ' <span class="st ' + (ST_CLASS[r[R.status]] || "plan") + '">' + esc(r[R.status]) +
         (r[R.paid] ? " " + esc(r[R.paid].slice(8, 10) + "." + r[R.paid].slice(5, 7)) : "") + '</span>') +
-      (r[R.note] ? " · " + esc(r[R.note]) : "") + lineNote(r) + '</small></div>';
+      lineNote(r) + '</small></div>';
     if (edit) {
       h += (ex ? '<div class="hh">–</div>' : '<input class="h' + (d ? " dirty" : "") + '" type="text" inputmode="decimal" autocomplete="off" aria-label="Години: ' + esc(r[R.person]) + '" data-f="hours" value="' + esc(v.hours) + '" placeholder="год">') +
         '<input class="s' + (d ? " dirty" : "") + '" type="text" inputmode="decimal" autocomplete="off" aria-label="Гривні: ' + esc(r[R.person]) + '" data-f="sum" value="' + esc(v.sum) + '" placeholder="грн">';
     } else {
       h += '<div class="hh">' + (hrs(r[R.hours]) || "–") + '</div><div class="amt">' + money(r[R.sum]) + '</div>';
     }
+    h += noteHtml(r);
     if (canAll()) {
       h += '<div class="rowtools">';
       if (S.open[id]) {
@@ -369,9 +393,25 @@
       } else {
         h += '<button class="linkbtn" type="button" data-act="more">' + (side ? "змінити ставку" : "змінити ставку, статтю, статус") + '</button>';
       }
+      if (!S.noteOpen[id]) h += noteBtn(r);
       h += '</div>';
+    } else if (canNote(r) && !S.noteOpen[id]) {
+      h += '<div class="rowtools">' + noteBtn(r) + '</div>';
     }
     return h + '</div>';
+  }
+
+  // Коментар під рядком: текст, хто й коли; редагування — тим, хто вносить години в проєкті
+  function noteBtn(r) { return '<button class="linkbtn" type="button" data-act="note">' + (r[R.note] ? "змінити коментар" : "коментар") + '</button>'; }
+  function noteHtml(r) {
+    var id = r[R.id];
+    if (S.noteOpen[id]) {
+      return '<div class="noteedit"><textarea data-n="note" maxlength="1000" rows="3" aria-label="Коментар: ' + esc(r[R.person]) + '" placeholder="Коментар до виплати">' + esc(r[R.note] || "") + '</textarea>' +
+        '<div><button class="btn primary" type="button" data-act="notesave">Зберегти коментар</button> <button class="linkbtn" type="button" data-act="note">скасувати</button></div></div>';
+    }
+    if (!r[R.note]) return "";
+    var when = r[R.noteAt] ? String(r[R.noteAt]).slice(8, 10) + "." + String(r[R.noteAt]).slice(5, 7) : "";
+    return '<div class="note">' + esc(r[R.note]) + (r[R.noteBy] || when ? '<small> — ' + esc([r[R.noteBy], when].filter(String).join(", ")) + '</small>' : "") + '</div>';
   }
 
   // Підпис статті в рядку; якщо за статтею перевищення — червоним, на скільки
@@ -411,7 +451,7 @@
         var ecodes = {}; pr.forEach(function (r) { ecodes[r[R.project]] = 1; });
         return '<div class="bar"><button class="btn" type="button" data-act="back">‹ Усі люди</button>' + yearSeg() + '</div>' +
           '<div class="block"><h2>' + esc(S.person) + ' <small>витрати · ' + S.year + ' рік, грн</small></h2>' + tilesWrap(byStatus(pr)) +
-          matrix(Object.keys(ecodes).sort(uk), function (c) { return pr.filter(function (r) { return r[R.project] === c; }); }, "Проєкт", "project") + '</div>';
+          matrix(Object.keys(ecodes).sort(uk), function (c) { return pr.filter(function (r) { return r[R.project] === c; }); }, "Проєкт", "project") + '</div>' + notesBlock(pr, "person");
       }
       var codes = {}; pr.forEach(function (r) { codes[r[R.project]] = 1; });
       var hoursPer = new Array(12).fill(0);
@@ -428,8 +468,8 @@
               '<tr class="hours"><td>Норма годин</td><td></td>' + hoursPer.map(function (v, i) { return '<td>' + norm(S.year, i + 1) + '</td>'; }).join("") + '<td>' + MSHORT.reduce(function (a, _, i) { return a + norm(S.year, i + 1); }, 0) + '</td></tr>' +
               '<tr class="hours"><td>Залучення</td><td></td>' + hoursPer.map(function (v, i) { return loadCell(monthHours(S.person, S.year, i + 1), "", S.year, i + 1); }).join("") + '<td></td></tr>' }) +
         '<p class="legend" style="padding:6px 12px 0">Залучення — години в проєктах ЦППР ÷ норма годин місяця (робочі дні × 8); понад 100% — червоним. ' + (pr.some(function (r) { return r[R.kind] === "ЗП"; }) ? NET_NOTE : "") + '</p>' +
-        (pi.min || pi.max ? '<p class="legend" style="padding:6px 12px 0"><span class="below">жовтим</span> — місяць нижче мінімального гонорару, <span class="above">червоним</span> — вище максимального. Ураховано й заробіток на стороні.</p>' : "") +
-'</div>';
+        (pi.min || pi.max ? '<p class="legend" style="padding:6px 12px 0"><span class="below">жовтим</span> — місяць нижче мінімального гонорару, <span class="above">червоним</span> — вище максимального. Ураховано й заробіток на стороні, і виплати з інших періодів.</p>' : "") +
+'</div>' + notesBlock(pr, "person");
     }
     var tot = {};
     yr.forEach(function (r) { tot[r[R.person]] = (tot[r[R.person]] || 0) + (r[R.sum] || 0); });
@@ -510,7 +550,7 @@
         '<div class="block"><h2>' + esc(code) + sideTag(code) + (p.leads.length ? ' <small>керівник: ' + esc(p.leads.join(", ")) + '</small>' : "") +
         ' <small>' + S.year + ' рік, грн</small></h2>' + tilesWrap(byStatus(pr), true) +
         matrix(Object.keys(names).sort(uk), function (n) { return pr.filter(function (r) { return r[R.person] === n; }); }, "Людина", "person", null,
-          { rate: function (n) { return isSide(code) || isExpense(n) ? null : rateIn(n, code); } }) + '</div>' + linesTable(code);
+          { rate: function (n) { return isSide(code) || isExpense(n) ? null : rateIn(n, code); } }) + '</div>' + notesBlock(pr, "project") + linesTable(code);
       var bs = D.budgets.filter(function (b) { return b.project === code; });
       if (bs.length) {
         h += '<div class="block"><h2>Бюджет на людину <small>план і факт разом</small></h2><div class="tw"><table class="t"><thead><tr><th>Людина</th><th>Період</th><th>Бюджет</th><th>Використано</th><th>Залишок</th></tr></thead><tbody>';
@@ -542,9 +582,11 @@
   function viewYear() {
     var allYear = rowsOf(function (r) { return r[R.year] === S.year; });
     var yr = allYear.filter(pass);
-    var own = yr.filter(function (r) { return !isSide(r[R.project]); }), side = yr.filter(function (r) { return isSide(r[R.project]); });
+    var own = yr.filter(function (r) { return !isSide(r[R.project]); });
+    var side = yr.filter(function (r) { return isSide(r[R.project]) && !isPrior(r[R.project]); }), prior = yr.filter(function (r) { return isPrior(r[R.project]); });
     var codes = {}; own.forEach(function (r) { codes[r[R.project]] = 1; });
     var sideNames = {}; side.forEach(function (r) { sideNames[r[R.person]] = 1; });
+    var priorNames = {}; prior.forEach(function (r) { priorNames[r[R.person]] = 1; });
     var per = { paid: new Array(12).fill(0), ok: new Array(12).fill(0), plan: new Array(12).fill(0) };
     own.forEach(function (r) { per[ST_CLASS[r[R.status]] || "plan"][r[R.month] - 1] += r[R.sum] || 0; });
     function line(label, arr) {
@@ -559,12 +601,15 @@
         matrix(Object.keys(own.reduce(function (o, r) { o[r[R.person]] = 1; return o; }, {})).sort(uk),
           function (n) { return own.filter(function (r) { return r[R.person] === n; }); }, "Людина", "person") + '</div>') +
       loadBlock(own) +
+      (prior.length ? '<div class="block"><h2>З інших періодів <small>виплати ЦППР за роботу в інших місяцях</small></h2>' +
+        matrix(Object.keys(priorNames).sort(uk), function (n) { return prior.filter(function (r) { return r[R.person] === n; }); }, "Людина", "person") + '</div>' : "") +
       (side.length ? '<div class="block"><h2>Зароблено на стороні <small>не через ЦППР</small></h2>' +
         matrix(Object.keys(sideNames).sort(uk), function (n) { return side.filter(function (r) { return r[R.person] === n; }); }, "Людина", "person") + '</div>' : "") +
       '<div class="block"><h2>Що оплачено і що попереду</h2><div class="tw"><table class="t"><thead><tr><th>Статус</th>' +
       MSHORT.map(function (m) { return '<th>' + m + '</th>'; }).join("") + '<th>Разом</th></tr></thead><tbody>' +
       line("Оплачено", per.paid) + line("Підтверджено", per.ok) + line("План", per.plan) + '</tbody></table></div></div>' +
-      '<p class="legend">Суми — виплати людям за місяцями, без інших витрат проєктів. ' + NET_NOTE + ' Клік по заголовку стовпця — сортування.</p>';
+      notesBlock(yr) +
+      '<p class="legend">Суми — виплати людям за місяцями, без інших витрат проєктів. ' + NET_NOTE + ' Клітинка з жовтим кутиком — є коментар (наведіть мишку або див. перелік «Коментарі»). Клік по заголовку стовпця — сортування.</p>';
   }
 
   // Залучення людей за місяцями року
@@ -705,7 +750,7 @@
       var m = S.month + (act === "next" ? 1 : -1), y = S.year;
       if (m < 1) { m = 12; y--; } if (m > 12) { m = 1; y++; }
       if (!leaveOk()) return;
-      dirty = {}; S.open = {}; S.month = m; S.year = y; render();
+      dirty = {}; S.open = {}; S.noteOpen = {}; S.month = m; S.year = y; render();
     } else if (act === "nofilter" || act === "mineonly") {
       if (!leaveOk()) return;
       dirty = {}; S.fProject = ""; S.fPerson = ""; S.fLead = act === "mineonly" ? (D.me.lead || "") : ""; render();
@@ -716,6 +761,11 @@
     else if (act === "project") { S.tab = "projects"; S.project = v; render(); window.scrollTo(0, 0); }
     else if (act === "back") { S.person = ""; S.project = ""; render(); }
     else if (act === "more") { var id = +b.closest(".row").getAttribute("data-id"); S.open[id] = !S.open[id]; render(); }
+    else if (act === "note") { var nid = +b.closest(".row").getAttribute("data-id"); S.noteOpen[nid] = !S.noteOpen[nid]; render(); var ta = document.querySelector('.row[data-id="' + nid + '"] textarea'); if (ta) ta.focus(); }
+    else if (act === "notesave") {
+      var sid = +b.closest(".row").getAttribute("data-id"), txt = b.closest(".row").querySelector("textarea").value;
+      run(api("note", { id: sid, note: txt }), "Коментар збережено").then(function (res) { if (res) delete S.noteOpen[sid]; render(); });
+    }
     else if (act === "confirm") {
       saveDirty().then(function (ok) {
         if (!ok) return;
