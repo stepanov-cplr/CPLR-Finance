@@ -33,6 +33,8 @@ header.top img{height:34px;width:auto;display:block}
 .btn{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 14px;cursor:pointer;font-size:14px;min-height:38px}
 .btn:hover{border-color:var(--blue)}
 .btn.primary{background:var(--navy);color:#fff;border-color:var(--navy);font-weight:600}
+.btn.edit{background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600;box-shadow:0 2px 6px rgba(28,117,188,.35)}
+.btn.edit:hover{background:#155E98;border-color:#155E98}
 .btn.good{background:var(--paid);color:#fff;border-color:var(--paid);font-weight:600}
 .btn:disabled{opacity:.45;cursor:default}
 header.top .btn{background:transparent;color:#fff;border-color:rgba(255,255,255,.35);padding:6px 12px;min-height:32px}
@@ -71,6 +73,17 @@ input.pick{width:100%}
 .tile.prior{border-left:4px solid #1C75BC}
 .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .filters select.pick{flex:1 1 150px;min-width:0}
+.dirtag{display:inline-block;font-size:11.5px;background:#E8EEF8;color:#252868;border-radius:6px;padding:1px 7px;font-weight:600;white-space:nowrap;margin:2px 4px 2px 0}
+.dirtag.com{background:#FDEFE3;color:#8C4A12}
+.dirtag.adm{background:#ECEDEF;color:#4A4D55}
+.item.person .dirs{flex-basis:100%;margin-top:2px}
+.dirbox{padding:8px 12px 0;font-size:13.5px;color:var(--navy)}
+.dirbox .muted{color:var(--muted)}
+.dirbox.editing{display:flex;flex-direction:column;gap:6px;background:#F6F8FC;margin:8px 12px 0;padding:10px 12px;border-radius:10px}
+.dirgrp{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center}
+.dirgrp small{flex-basis:100%;color:var(--muted);font-size:12px}
+.dirgrp label{font-size:13.5px;display:flex;gap:5px;align-items:center;min-height:30px}
+.dirbtns{margin-top:4px}
 .sidetag{font-size:11.5px;background:#EFE8F8;color:#5B3A8C;border-radius:6px;padding:1px 7px;font-weight:600;white-space:nowrap}
 .sidetag.prior{background:#E3EFFA;color:#1C5A8C}
 .sidenote{padding:8px 12px;font-size:13px;color:#5B3A8C;background:#F7F3FC;border-bottom:1px solid var(--line)}
@@ -243,7 +256,7 @@ table.t td.over{color:var(--bad);font-weight:700}
 </div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="app.js?v=1.7.0"></script>
+<script src="app.js?v=1.8.1"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
 </body>
 </html>

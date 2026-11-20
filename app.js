@@ -1,4 +1,7 @@
 /* Фінсистема ЦППР — сторінка. Даних і адрес команди тут немає: усе приходить із сервера після входу.
+   Версія 1.8.1 — 20.11.2026: кнопка «Редагувати суми» — помітна (синя, з олівцем).
+   Версія 1.8.0 — 20.11.2026: напрями (експертні, комунікаційний, адміністративний) — фільтр у «Місяці», «Році» і «Людях»,
+     напрями в картці людини; бачать лише адміни й члени правління, змінює адмін.
    Версія 1.7.0 — 17.11.2026: правка сум у картці людини й картці проєкту (кнопка «Редагувати суми»): години видно в клітинці,
      неціле число годин — помаранчевим; підсумки, рамки гонорару й залучення перераховуються одразу.
    Версія 1.6.3 — 17.11.2026: у «Році» блок «Перевищення бюджету» — унизу сторінки.
@@ -29,7 +32,7 @@
   var R = { id: 0, year: 1, month: 2, person: 3, project: 4, rate: 5, hours: 6, sum: 7, status: 8, paid: 9, kind: 10, note: 11, line: 12, noteBy: 13, noteAt: 14 };
 
   var D = null;            // дані з сервера — лише в пам'яті сторінки
-  var S = { sort: {}, listSort: { people: "name", projects: "sum" }, tab: "month", year: 0, month: 0, fLead: "", fProject: "", fPerson: "", person: "", project: "", q: "", open: {}, noteOpen: {}, mxOn: false, mxAdd: {} };
+  var S = { sort: {}, listSort: { people: "name", projects: "sum" }, tab: "month", year: 0, month: 0, fLead: "", fProject: "", fPerson: "", fDir: "", dirEdit: false, person: "", project: "", q: "", open: {}, noteOpen: {}, mxOn: false, mxAdd: {} };
   var dirty = {}, mx = {};          // dirty: id рядка → {mode: "hours"|"sum", hours, sum, rate}; mx: «рік|місяць|людина|проєкт» → сума з картки
   var busy = false;
 
@@ -216,8 +219,55 @@
     if (S.fLead && !isSide(code) && project(code).leads.indexOf(S.fLead) < 0) return false;
     return true;
   }
-  function pass(r) { return passProject(r[R.project]) && (!S.fPerson || r[R.person] === S.fPerson); }
-  function filtersOn() { return !!(S.fLead || S.fProject || S.fPerson); }
+  function pass(r) { return passProject(r[R.project]) && (!S.fPerson || r[R.person] === S.fPerson) && passDir(r[R.person]); }
+  function filtersOn() { return !!(S.fLead || S.fProject || S.fPerson || (hasDirs() && S.fDir)); }
+
+  // ── Напрями: лише для адмінів і членів правління (іншим сервер їх не віддає) ──
+  var DIR_GROUPS = [["експертний", "Експертні напрями", "усі експертні"], ["комунікаційний", "Комунікаційний", "увесь комунікаційний"], ["адміністративний", "Адміністративний", "уся адміністрація"]];
+  function hasDirs() { return !!(D && D.directions && D.directions.length); }
+  function canDirs() { return hasDirs() && D.me.role === "admin"; }
+  function dirsOf(name) { return personInfo(name).dirs || []; }
+  function dirType(name) { var d = D.directions.filter(function (x) { return x.name === name; })[0]; return d ? d.type : ""; }
+  // Людина в кількох напрямах потрапляє в кожен із них
+  function passDir(name) {
+    if (!S.fDir || !hasDirs()) return true;
+    var ds = dirsOf(name);
+    if (S.fDir === "-") return !ds.length;
+    if (S.fDir.indexOf("type:") === 0) { var t = S.fDir.slice(5); return ds.some(function (d) { return dirType(d) === t; }); }
+    return ds.indexOf(S.fDir) >= 0;
+  }
+  function dirSelect() {
+    if (!hasDirs()) return "";
+    function o(v, label) { return '<option value="' + esc(v) + '"' + (S.fDir === v ? " selected" : "") + '>' + esc(label) + '</option>'; }
+    return '<select class="pick" id="fDir" aria-label="Напрям">' + o("", "Усі напрями") + DIR_GROUPS.map(function (g) {
+      var list = D.directions.filter(function (d) { return d.type === g[0]; });
+      if (!list.length) return "";
+      return '<optgroup label="' + g[1] + '">' + (list.length > 1 ? o("type:" + g[0], "— " + g[2] + " —") : "") +
+        list.map(function (d) { return o(d.name, d.name); }).join("") + '</optgroup>';
+    }).join("") + '<optgroup label="Інше">' + o("-", "без напряму") + '</optgroup></select>';
+  }
+  function dirTags(name) {
+    return dirsOf(name).map(function (d) { return '<span class="dirtag ' + (dirType(d) === "експертний" ? "" : dirType(d) === "комунікаційний" ? "com" : "adm") + '">' + esc(d) + '</span>'; }).join("");
+  }
+  function dirFilterNote() {
+    if (!hasDirs() || !S.fDir) return "";
+    var label = S.fDir === "-" ? "без напряму" : S.fDir.indexOf("type:") === 0 ? DIR_GROUPS.filter(function (g) { return "type:" + g[0] === S.fDir; }).map(function (g) { return g[1].toLowerCase(); })[0] : S.fDir;
+    return '<p class="legend">Напрям: <b>' + esc(label) + '</b> — показано лише людей цього напряму (з усіма їхніми проєктами). Людина з кількома напрямами потрапляє в кожен.</p>';
+  }
+  function dirCard(name) {
+    if (!hasDirs() || isExpense(name) && !dirsOf(name).length && !canDirs()) return "";
+    var ds = dirsOf(name);
+    if (S.dirEdit && canDirs()) {
+      return '<div class="dirbox editing"><b>Напрями</b>' + DIR_GROUPS.map(function (g) {
+        var list = D.directions.filter(function (d) { return d.type === g[0]; });
+        return list.length ? '<div class="dirgrp"><small>' + g[1] + '</small>' + list.map(function (d) {
+          return '<label><input type="checkbox" data-dir="' + esc(d.name) + '"' + (ds.indexOf(d.name) >= 0 ? " checked" : "") + '> ' + esc(d.name) + '</label>';
+        }).join("") + '</div>' : "";
+      }).join("") + '<div class="dirbtns"><button class="btn primary" type="button" data-act="dirsave">Зберегти напрями</button> <button class="btn" type="button" data-act="dircancel">Скасувати</button></div></div>';
+    }
+    return '<div class="dirbox"><b>Напрями:</b> ' + (ds.length ? dirTags(name) : '<span class="muted">не визначено</span>') +
+      (canDirs() ? ' <button class="linkbtn" type="button" data-act="diredit">змінити</button>' : "") + '</div>';
+  }
   function filterBar(rows) {
     var leads = {}, codes = {}, names = {};
     D.projects.forEach(function (p) { p.leads.forEach(function (l) { leads[l] = 1; }); if (p.active) codes[p.code] = 1; });
@@ -232,9 +282,9 @@
     return '<div class="filters">' +
       (D.me.role === "pm" ? "" : sel("fLead", "Керівник", S.fLead, Object.keys(leads).sort(uk), "Усі керівники")) +
       sel("fProject", "Проєкт", S.fProject, Object.keys(codes).sort(uk), "Усі проєкти") +
-      sel("fPerson", "Людина", S.fPerson, Object.keys(names).sort(uk), "Усі люди") +
+      sel("fPerson", "Людина", S.fPerson, Object.keys(names).sort(uk), "Усі люди") + dirSelect() +
       (mineLead && S.fLead !== mineLead ? '<button class="linkbtn" type="button" data-act="mineonly">лише мої</button>' : "") +
-      (filtersOn() ? '<button class="linkbtn" type="button" data-act="nofilter">скинути</button>' : "") + '</div>';
+      (filtersOn() ? '<button class="linkbtn" type="button" data-act="nofilter">скинути</button>' : "") + '</div>' + dirFilterNote();
   }
 
   // ── Спільні шматки розмітки ───────────────────────────
@@ -312,7 +362,7 @@
     var codes = {};
     shown.forEach(function (r) { codes[r[R.project]] = 1; });
     // порожні блоки — лише там, де людина може щось внести, і якщо не шукають конкретну людину
-    if (!S.fPerson) D.projects.forEach(function (p) { if (p.active && canEditProject(p.code) && passProject(p.code)) codes[p.code] = 1; });
+    if (!S.fPerson && !(hasDirs() && S.fDir)) D.projects.forEach(function (p) { if (p.active && canEditProject(p.code) && passProject(p.code)) codes[p.code] = 1; });
     var list = Object.keys(codes).sort(function (a, b) {
       return (isSide(a) - isSide(b)) || (isMine(b) - isMine(a)) || (project(b).active - project(a).active) || uk(a, b);
     });
@@ -458,7 +508,7 @@
       if (isExpense(S.person)) {
         var ecodes = {}; pr.forEach(function (r) { ecodes[r[R.project]] = 1; }); extra.forEach(function (c) { ecodes[c] = 1; });
         return '<div class="bar"><button class="btn" type="button" data-act="back">‹ Усі люди</button>' + yearSeg() + '</div>' +
-          '<div class="block"><h2>' + esc(S.person) + ' <small>витрати · ' + S.year + ' рік, грн</small></h2>' + tilesWrap(byStatus(pr)) + mxBar("person", ecodes) +
+          '<div class="block"><h2>' + esc(S.person) + ' <small>витрати · ' + S.year + ' рік, грн</small></h2>' + dirCard(S.person) + tilesWrap(byStatus(pr)) + mxBar("person", ecodes) +
           matrix(Object.keys(ecodes).sort(uk), function (c) { return pr.filter(function (r) { return r[R.project] === c; }); }, "Проєкт", "project", null, { edit: { person: S.person } }) + '</div>' + notesBlock(pr, "person");
       }
       var codes = {}; pr.forEach(function (r) { codes[r[R.project]] = 1; }); extra.forEach(function (c) { codes[c] = 1; });
@@ -466,7 +516,7 @@
       pr.forEach(function (r) { hoursPer[r[R.month] - 1] += r[R.hours] || 0; if (!isSide(r[R.project])) loadPer[r[R.month] - 1] += r[R.hours] || 0; });
       return '<div class="bar"><button class="btn" type="button" data-act="back">‹ Усі люди</button>' + yearSeg() + '</div>' +
         '<div class="block"><h2>' + esc(S.person) + ' <small>' + S.year + ' рік, грн</small>' +
-        (mmText(pi) ? '<span class="mm">' + mmText(pi) + '</span>' : "") + '</h2>' +
+        (mmText(pi) ? '<span class="mm">' + mmText(pi) + '</span>' : "") + '</h2>' + dirCard(S.person) +
         tilesWrap(byStatus(pr), true) + mxBar("person", codes) +
         matrix(Object.keys(codes).sort(function (a, b) { return (isSide(a) - isSide(b)) || uk(a, b); }),
           function (c) { return pr.filter(function (r) { return r[R.project] === c; }); }, "Проєкт", "project", sideTag,
@@ -483,9 +533,11 @@
     yr.forEach(function (r) { tot[r[R.person]] = (tot[r[R.person]] || 0) + (r[R.sum] || 0); });
     var q = S.q.toLowerCase(), ls = S.listSort.people;
     var key = function (n) { return ls === "sum" ? monthTotal(n, S.year, S.month) : ls === "load" ? monthHours(n, S.year, S.month) : 0; };
-    var names = Object.keys(tot).filter(function (n) { return !q || n.toLowerCase().indexOf(q) >= 0; })
+    if (hasDirs()) D.people.forEach(function (p) { if (p.active && !(p.name in tot) && S.fDir && S.fDir !== "-") tot[p.name] = 0; }); // людина напряму без виплат цього року — теж у списку
+    var names = Object.keys(tot).filter(function (n) { return (!q || n.toLowerCase().indexOf(q) >= 0) && passDir(n); })
       .sort(function (a, b) { return (isExpense(a) - isExpense(b)) || (key(b) - key(a)) || uk(a, b); });
     return '<div class="bar">' + yearSeg() + listSortSeg("people", [["name", "за прізвищем"], ["sum", "за сумою"], ["load", "за залученням"]]) + '</div>' +
+      (hasDirs() ? '<div class="filters">' + dirSelect() + (S.fDir ? '<button class="linkbtn" type="button" data-act="nodir">усі напрями</button>' : "") + '</div>' : "") +
       '<input class="pick" id="q" type="search" autocomplete="off" placeholder="Пошук за прізвищем" value="' + esc(S.q) + '" style="margin-bottom:12px">' +
       (names.length ? '<p class="legend">Сума за ' + MONTHS[S.month - 1].toLowerCase() + ' ' + S.year + ' (разом зі стороннім), % залучення (години ÷ ' + norm(S.year, S.month) + ' год норми місяця) і рамки гонорару «мін – макс». Клік — картка людини.</p>' +
         '<p class="legend keys"><span class="below">жовтим</span> — сума за місяць нижча за мінімальний гонорар · <span class="above">червоним</span> — вища за максимальний · <span class="over">червоний %</span> — залучення понад 100% · без кольору — у межах рамок або рамок не задано</p><div class="list">' + names.map(function (n) {
@@ -493,8 +545,9 @@
         var lp = isExpense(n) ? 0 : loadPct(monthHours(n, S.year, S.month), S.year, S.month);
         return '<button class="item person" type="button" data-act="person" data-v="' + esc(n) + '"><b>' + esc(n) + '</b><span class="' + c + '">' + (v ? money(v) : "–") + '</span>' +
           (lp ? '<em class="' + (lp > 100 ? "over" : "") + '">' + lp + '%</em>' : "") + (isExpense(n) ? '<em>витрати</em>' : "") +
-          (p.min || p.max ? '<small>' + (p.min ? money(p.min) : "–") + ' – ' + (p.max ? money(p.max) : "–") + '</small>' : "") + '</button>';
-      }).join("") + '</div>' : '<div class="empty">Нікого не знайдено.</div>');
+          (p.min || p.max ? '<small>' + (p.min ? money(p.min) : "–") + ' – ' + (p.max ? money(p.max) : "–") + '</small>' : "") +
+          (hasDirs() && dirsOf(n).length ? '<span class="dirs">' + dirTags(n) + '</span>' : "") + '</button>';
+      }).join("") + '</div>' + (hasDirs() && S.fDir ? '<p class="legend">У напрямі: ' + names.length + '. Сума за місяць — разом з усіма проєктами людини.</p>' : "") : '<div class="empty">Нікого не знайдено.</div>');
   }
   function personInfo(name) { return D.people.filter(function (p) { return p.name === name; })[0] || {}; }
   // Витрати (Офіс, Інтернет) — не люди: без ставки, годин, залучення і рамок гонорару
@@ -586,8 +639,8 @@
   function mxBar(kind, have) {
     if (!canMxAny()) return "";
     return '<div class="mxbar">' + (S.mxOn
-      ? '<span>Правка сум: впишіть гривні — години рахуються за ставкою. ' + (canAll() ? "Можна й минулі, й оплачені місяці." : "Оплачене змінює Інеса.") + '</span>' + mxAddRow(kind, have || {}) + '<button class="btn" type="button" data-act="mxoff">Готово</button>'
-      : '<button class="btn" type="button" data-act="mxon">Редагувати суми</button>') + '</div>';
+      ? '<span>Правка сум: впишіть гривні — години рахуються за ставкою. ' + (canAll() ? "Можна й минулі, й оплачені місяці." : "Оплачене змінює Інеса.") + '</span>' + mxAddRow(kind, have || {}) + '<button class="btn primary" type="button" data-act="mxoff">✓ Готово</button>'
+      : '<button class="btn edit" type="button" data-act="mxon">✎ Редагувати суми</button>') + '</div>';
   }
   function mxAddRow(kind, have) {
     var opts;
@@ -878,13 +931,25 @@
       dirty = {}; mx = {}; S.open = {}; S.noteOpen = {}; S.month = m; S.year = y; render();
     } else if (act === "nofilter" || act === "mineonly") {
       if (!leaveOk()) return;
-      dirty = {}; mx = {}; S.fProject = ""; S.fPerson = ""; S.fLead = act === "mineonly" ? (D.me.lead || "") : ""; render();
+      dirty = {}; mx = {}; S.fProject = ""; S.fPerson = ""; S.fDir = ""; S.fLead = act === "mineonly" ? (D.me.lead || "") : ""; render();
+    }
+    else if (act === "nodir") { S.fDir = ""; render(); }
+    else if (act === "diredit") { S.dirEdit = true; render(); }
+    else if (act === "dircancel") { S.dirEdit = false; render(); }
+    else if (act === "dirsave") {
+      var chosen = Array.prototype.map.call(document.querySelectorAll(".dirbox input[data-dir]:checked"), function (el) { return el.getAttribute("data-dir"); });
+      var who = S.person;
+      run(api("setDirs", { person: who, dirs: chosen }), "Напрями збережено").then(function (res) {
+        if (res) { var pi = personInfo(res.person); if (pi.name) pi.dirs = res.dirs; S.dirEdit = false; }
+        render();
+      });
     }
     else if (act === "year") { if (Object.keys(mx).length && !leaveOk()) return; mx = {}; S.mxAdd = {}; S.year = +b.getAttribute("data-y"); render(); }
     else if (act === "lsort") { S.listSort[b.getAttribute("data-l")] = v; render(); }
     else if (act === "person" || act === "project" || act === "back") {
       if (Object.keys(mx).length && !leaveOk()) return;
       mx = {}; S.mxOn = false; S.mxAdd = {};
+      S.dirEdit = false;
       if (act === "person") { S.tab = "people"; S.person = v; } else if (act === "project") { S.tab = "projects"; S.project = v; } else { S.person = ""; S.project = ""; }
       render(); if (act !== "back") window.scrollTo(0, 0);
     }
@@ -968,6 +1033,7 @@
       if (t.value) { S.mxAdd[kk] = (S.mxAdd[kk] || []).concat(t.value); render(); }
       return;
     }
+    if (t.id === "fDir") { if (S.tab !== "people" && !leaveOk()) { render(); return; } if (S.tab !== "people") { dirty = {}; mx = {}; } S.fDir = t.value; render(); return; }
     if (t.id === "fLead" || t.id === "fProject" || t.id === "fPerson") {
       if (!leaveOk()) { render(); return; }
       dirty = {}; mx = {};
