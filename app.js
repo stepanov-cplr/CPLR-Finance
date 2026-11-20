@@ -1,4 +1,8 @@
 /* Фінсистема ЦППР — сторінка. Даних і адрес команди тут немає: усе приходить із сервера після входу.
+   Версія 1.9.0 — 20.11.2026: «Отримано фактично» — «Передано колегам» і «Внесок» віднімаються від суми людини (лише перегляд,
+     ведуться у файлі «Виплати»; бачать адміни й члени правління); звірка доплат із переданим колегам у «Році».
+   Версія 1.8.2 — 20.11.2026: «Доплата від колег» — окрема категорія: не через ЦППР, лише сума, без годин; у загальну суму людини
+     і в рамки гонорару; окрема плитка й окремий блок у «Році».
    Версія 1.8.1 — 20.11.2026: кнопка «Редагувати суми» — помітна (синя, з олівцем).
    Версія 1.8.0 — 20.11.2026: напрями (експертні, комунікаційний, адміністративний) — фільтр у «Місяці», «Році» і «Людях»,
      напрями в картці людини; бачать лише адміни й члени правління, змінює адмін.
@@ -44,7 +48,7 @@
   }
   function money(n) {
     n = Math.round(n || 0);
-    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    return (n < 0 ? "−" : "") + String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   }
   function hrs(n) { return n === null || n === undefined || n === "" ? "" : String(Math.round(n * 100) / 100).replace(".", ","); }
   function sumStr(n) { return n ? String(Math.round(n * 100) / 100).replace(".", ",") : ""; }
@@ -127,19 +131,22 @@
   function isSide(code) { return !!project(code).side; }
   // «З інших періодів» — виплати ЦППР за роботу в інших місяцях: як стороннє — без підтвердження й оплати і без годин залучення
   function isPrior(code) { return !!project(code).prior; }
+  function isBonus(code) { return !!project(code).bonus; }
+  function isOut(code) { return !!project(code).out; }   // «передано колегам» / «внесок» — лише перегляд, з файлу «Виплати»
+  function seesOutRows() { return D.projects.some(function (p) { return p.out; }); }
   function isLead() { return D.me.role === "board" || D.me.role === "pm"; }
-  function canEditProject(code) { return canAll() || (D.me.role === "board" && (isMine(code) || isSide(code))) || (D.me.role === "pm" && isMine(code)); }
-  function canEditRow(r) { return canAll() || (canEditProject(r[R.project]) && r[R.status] !== ST.paid); }
+  function canEditProject(code) { if (isOut(code)) return false; return canAll() || (D.me.role === "board" && (isMine(code) || isSide(code))) || (D.me.role === "pm" && isMine(code)); }
+  function canEditRow(r) { if (isOut(r[R.project])) return false; return canAll() || (canEditProject(r[R.project]) && r[R.status] !== ST.paid); }
   // коментар — і до оплаченого, якщо людина вносить години в цьому проєкті
-  function canNote(r) { return canAll() || canEditProject(r[R.project]); }
+  function canNote(r) { if (isOut(r[R.project])) return false; return canAll() || canEditProject(r[R.project]); }
 
   // ── Допоміжне для даних ───────────────────────────────
   function rowsOf(f) { return D.rows.filter(f); }
   function sum(rows) { return rows.reduce(function (a, r) { return a + (r[R.sum] || 0); }, 0); }
   // Виплати ЦППР за статусами; заробіток на стороні й виплати з інших періодів — окремо
   function byStatus(rows) {
-    var o = { plan: 0, ok: 0, paid: 0, side: 0, prior: 0 };
-    rows.forEach(function (r) { o[isPrior(r[R.project]) ? "prior" : isSide(r[R.project]) ? "side" : (ST_CLASS[r[R.status]] || "plan")] += r[R.sum] || 0; });
+    var o = { plan: 0, ok: 0, paid: 0, side: 0, prior: 0, bonus: 0, given: 0, contrib: 0 };
+    rows.forEach(function (r) { var ot = project(r[R.project]).out; o[ot === "передано" ? "given" : ot ? "contrib" : isBonus(r[R.project]) ? "bonus" : isPrior(r[R.project]) ? "prior" : isSide(r[R.project]) ? "side" : (ST_CLASS[r[R.status]] || "plan")] += r[R.sum] || 0; });
     return o;
   }
   function years() {
@@ -297,7 +304,11 @@
       '<div class="tile paid"><small>Оплачено</small><b>' + money(st.paid) + '</b></div>' +
       (st.prior ? '<div class="tile prior"><small>З інших періодів</small><b>' + money(st.prior) + '</b></div>' : "") +
       (st.side ? '<div class="tile side"><small>Зароблено на стороні</small><b>' + money(st.side) + '</b></div>' : "") +
-      '<div class="tile total"><small>' + (withSide && st.side ? "Разом зі стороннім, грн" : "Разом через ЦППР, грн") + '</small><b>' + money(cplr + (withSide ? st.side : 0)) + '</b></div></div>';
+      (st.bonus ? '<div class="tile bonus"><small>Доплати від колег</small><b>' + money(st.bonus) + '</b></div>' : "") +
+      (st.given ? '<div class="tile out"><small>Передано колегам</small><b>' + money(st.given) + '</b></div>' : "") +
+      (st.contrib ? '<div class="tile out"><small>Внески в ЦППР</small><b>' + money(st.contrib) + '</b></div>' : "") +
+      '<div class="tile total"><small>' + (withSide && (st.given || st.contrib) ? "Отримано фактично, грн" : withSide && (st.side || st.bonus) ? "Разом зі стороннім і доплатами, грн" : "Разом через ЦППР, грн") + '</small><b>' +
+      money(cplr + (withSide ? st.side + (st.bonus || 0) + (st.given || 0) + (st.contrib || 0) : 0)) + '</b></div></div>';
   }
   function yearSeg() {
     return '<div class="seg">' + years().map(function (y) {
@@ -322,7 +333,7 @@
     }).join("") + '</ul></div>';
   }
   function noteLabel(r, n) { return [r[R.project], r[R.person]].filter(function (x) { return x !== n; }).join(" · ") + ": " + r[R.note]; }
-  function sideTag(code) { return isPrior(code) ? ' <span class="sidetag prior">з інших періодів</span>' : isSide(code) ? ' <span class="sidetag">на стороні</span>' : ""; }
+  function sideTag(code) { var ot = project(code).out; if (ot) return ' <span class="sidetag out">' + (ot === "передано" ? "передано колегам" : "внесок у ЦППР") + '</span>'; return isBonus(code) ? ' <span class="sidetag bonus">доплата</span>' : isPrior(code) ? ' <span class="sidetag prior">з інших періодів</span>' : isSide(code) ? ' <span class="sidetag">на стороні</span>' : ""; }
   // Таблиця «рядки × 12 місяців»
   // opt.rate(назва) — ставка, грн/год, окремою колонкою; opt.mark(місяць, сума) — клас для клітинки підсумку
   function matrix(names, pick, firstHead, linkAct, tag, opt) {
@@ -385,7 +396,9 @@
         (lineUse(code).over.length ? ' <button class="overtag" type="button" data-act="project" data-v="' + esc(code) + '">перевищення бюджету: ' + lineUse(code).over.length + '</button>' : "") +
         (p.leads.length ? ' <small>керівник: ' + esc(p.leads.join(", ")) + '</small>' : "") +
         '<span class="sum">' + money(sum(rows)) + '</span></h2>';
-      if (p.prior) h += '<div class="sidenote">Виплати за роботу в інших періодах. Зараховуються до загальної виплати людини; підтвердження й оплати тут немає.</div>';
+      if (p.out) h += '<div class="sidenote">' + (p.out === "передано" ? "Частина заробленого, яку людина перерахувала колегам (у них це «Доплата»)." : "Внесок людини на рахунок ЦППР.") + ' Віднімається від суми людини — так видно, скільки вона отримала фактично. Ведеться у файлі «Виплати».</div>';
+      else if (p.bonus) h += '<div class="sidenote">Частина заробленого колегами в проєктах, яку вони перераховують людині, що допомагала без договору в проєкті. Не через ЦППР; зараховується до загальної виплати людини й у рамки гонорару.</div>';
+      else if (p.prior) h += '<div class="sidenote">Виплати за роботу в інших періодах. Зараховуються до загальної виплати людини; підтвердження й оплати тут немає.</div>';
       else if (p.side) h += '<div class="sidenote">Зароблене не через ЦППР. Зараховується до загальної виплати людини.</div>';
       if (!rows.length) h += '<div class="empty small">Ще нікого не внесено.</div>';
       else h += '<div class="rowhead"><span></span><span>години</span><span>гривні</span></div>';
@@ -395,7 +408,7 @@
       var nOk = p.side ? 0 : rows.filter(function (r) { return r[R.status] === ST.ok; }).length;
       if ((edit && nPlan) || (canAll() && nOk)) {
         h += '<div class="foot">';
-        if (edit && nPlan) h += '<button class="btn primary" type="button" data-act="confirm" data-v="' + esc(code) + '">Підтвердити години (' + nPlan + ')</button>';
+        if (edit && nPlan) h += '<button class="btn primary" type="button" data-act="confirm" data-v="' + esc(code) + '">' + (p.bonus ? "Підтвердити доплати" : "Підтвердити години") + ' (' + nPlan + ')</button>';
         if (canAll() && nOk) h += '<button class="btn good" type="button" data-act="pay" data-v="' + esc(code) + '">Позначити оплаченим (' + nOk + ')</button>';
         h += '</div>';
       }
@@ -425,9 +438,9 @@
 
   function rowHtml(r) {
     var id = r[R.id], d = dirty[id], edit = canEditRow(r), side = isSide(r[R.project]), v = live(r, d);
-    var ex = isExpense(r[R.person]);
+    var bon = isBonus(r[R.project]) || isOut(r[R.project]), ex = isExpense(r[R.person]) || bon;
     var h = '<div class="row" data-id="' + id + '"><div class="who"><b>' + esc(r[R.person]) + '</b><small>' +
-      (ex ? "витрати" : r[R.rate] ? money(r[R.rate]) + " грн/год" : "без ставки") + (r[R.kind] === "ЗП" ? ' · <span title="' + esc(NET_NOTE) + '">зарплата, чиста</span>' : "") +
+      (isOut(r[R.project]) ? (project(r[R.project]).out === "передано" ? "передано колегам" : "внесок у ЦППР") : bon ? "доплата від колег, лише сума" : ex ? "витрати" : r[R.rate] ? money(r[R.rate]) + " грн/год" : "без ставки") + (r[R.kind] === "ЗП" ? ' · <span title="' + esc(NET_NOTE) + '">зарплата, чиста</span>' : "") +
       (side ? "" : ' <span class="st ' + (ST_CLASS[r[R.status]] || "plan") + '">' + esc(r[R.status]) +
         (r[R.paid] ? " " + esc(r[R.paid].slice(8, 10) + "." + r[R.paid].slice(5, 7)) : "") + '</span>') +
       lineNote(r) + '</small></div>';
@@ -438,10 +451,10 @@
       h += '<div class="hh">' + (hrs(r[R.hours]) || "–") + '</div><div class="amt">' + money(r[R.sum]) + '</div>';
     }
     h += noteHtml(r);
-    if (canAll()) {
+    if (canAll() && !isOut(r[R.project])) {
       h += '<div class="rowtools">';
       if (S.open[id]) {
-        h += '<label>ставка <input type="text" inputmode="decimal" data-f="rate" value="' + esc(d && d.rate !== undefined ? d.rate : (r[R.rate] || "")) + '"></label>' +
+        h += (isBonus(r[R.project]) || isExpense(r[R.person]) ? "" : '<label>ставка <input type="text" inputmode="decimal" data-f="rate" value="' + esc(d && d.rate !== undefined ? d.rate : (r[R.rate] || "")) + '"></label>') +
           (linesOf(r[R.project]).length ? '<select data-f="line" aria-label="Стаття бюджету">' + lineOptions(r[R.project], r[R.line], "без статті") + '</select>' : "") +
           (side ? "" : '<select data-f="status" aria-label="Статус">' + [ST.plan, ST.ok, ST.paid].map(function (s) {
             return '<option' + (s === r[R.status] ? " selected" : "") + '>' + s + '</option>';
@@ -449,7 +462,7 @@
           (r[R.status] !== ST.paid || side ? '<button class="linkbtn danger" type="button" data-act="remove">вилучити</button>' : "") +
           '<button class="linkbtn" type="button" data-act="more">згорнути</button>';
       } else {
-        h += '<button class="linkbtn" type="button" data-act="more">' + (side ? "змінити ставку" : "змінити ставку, статтю, статус") + '</button>';
+        h += '<button class="linkbtn" type="button" data-act="more">' + (isBonus(r[R.project]) ? "ще" : side ? "змінити ставку" : "змінити ставку, статтю, статус") + '</button>';
       }
       if (!S.noteOpen[id]) h += noteBtn(r);
       h += '</div>';
@@ -494,8 +507,8 @@
     if (!opts) return "";
     return '<div class="addrow"><select aria-label="Додати людину"><option value="">+ додати людину…</option>' + opts + '</select>' +
       (linesOf(code).length ? '<select data-add="line" aria-label="Стаття бюджету">' + lineOptions(code, "", "стаття: як минулого разу") + '</select>' : "") +
-      '<input type="text" inputmode="decimal" placeholder="год" aria-label="Години" data-add="hours">' +
-      '<input type="text" inputmode="decimal" placeholder="або грн" aria-label="Гривні" data-add="sum">' +
+      (isBonus(code) ? '<input type="hidden" data-add="hours" value="">' : '<input type="text" inputmode="decimal" placeholder="год" aria-label="Години" data-add="hours">') +
+      '<input type="text" inputmode="decimal" placeholder="' + (isBonus(code) ? "грн" : "або грн") + '" aria-label="Гривні" data-add="sum">' +
       '<button class="btn" type="button" data-act="add">Додати</button></div>';
   }
 
@@ -526,7 +539,7 @@
               '<tr class="hours"><td>Норма годин</td><td></td>' + hoursPer.map(function (v, i) { return '<td>' + norm(S.year, i + 1) + '</td>'; }).join("") + '<td>' + MSHORT.reduce(function (a, _, i) { return a + norm(S.year, i + 1); }, 0) + '</td></tr>' +
               '<tr class="hours"><td>Залучення</td><td></td>' + loadPer.map(function (v, i) { return loadCell(v, "", S.year, i + 1); }).join("") + '<td></td></tr>' }) +
         '<p class="legend" style="padding:6px 12px 0">Залучення — години в проєктах ЦППР ÷ норма годин місяця (робочі дні × 8); понад 100% — червоним. ' + (pr.some(function (r) { return r[R.kind] === "ЗП"; }) ? NET_NOTE : "") + '</p>' +
-        (pi.min || pi.max ? '<p class="legend" style="padding:6px 12px 0"><span class="below">жовтим</span> — місяць нижче мінімального гонорару, <span class="above">червоним</span> — вище максимального. Ураховано й заробіток на стороні, і виплати з інших періодів.</p>' : "") +
+        (pi.min || pi.max ? '<p class="legend" style="padding:6px 12px 0"><span class="below">жовтим</span> — місяць нижче мінімального гонорару, <span class="above">червоним</span> — вище максимального. Ураховано заробіток на стороні, доплати від колег і виплати з інших періодів' + (seesOutRows() ? ", мінус передане колегам і внески — тобто отримано фактично" : "") + '.</p>' : "") +
 '</div>' + notesBlock(pr, "person");
     }
     var tot = {};
@@ -539,7 +552,7 @@
     return '<div class="bar">' + yearSeg() + listSortSeg("people", [["name", "за прізвищем"], ["sum", "за сумою"], ["load", "за залученням"]]) + '</div>' +
       (hasDirs() ? '<div class="filters">' + dirSelect() + (S.fDir ? '<button class="linkbtn" type="button" data-act="nodir">усі напрями</button>' : "") + '</div>' : "") +
       '<input class="pick" id="q" type="search" autocomplete="off" placeholder="Пошук за прізвищем" value="' + esc(S.q) + '" style="margin-bottom:12px">' +
-      (names.length ? '<p class="legend">Сума за ' + MONTHS[S.month - 1].toLowerCase() + ' ' + S.year + ' (разом зі стороннім), % залучення (години ÷ ' + norm(S.year, S.month) + ' год норми місяця) і рамки гонорару «мін – макс». Клік — картка людини.</p>' +
+      (names.length ? '<p class="legend">Сума за ' + MONTHS[S.month - 1].toLowerCase() + ' ' + S.year + ' (' + (seesOutRows() ? "отримано фактично: разом зі стороннім і доплатами, мінус передане колегам і внески" : "разом зі стороннім і доплатами") + '), % залучення (години ÷ ' + norm(S.year, S.month) + ' год норми місяця) і рамки гонорару «мін – макс». Клік — картка людини.</p>' +
         '<p class="legend keys"><span class="below">жовтим</span> — сума за місяць нижча за мінімальний гонорар · <span class="above">червоним</span> — вища за максимальний · <span class="over">червоний %</span> — залучення понад 100% · без кольору — у межах рамок або рамок не задано</p><div class="list">' + names.map(function (n) {
         var p = personInfo(n), v = monthTotal(n, S.year, S.month), c = mmClass(p, v);
         var lp = isExpense(n) ? 0 : loadPct(monthHours(n, S.year, S.month), S.year, S.month);
@@ -708,7 +721,9 @@
     var allYear = rowsOf(function (r) { return r[R.year] === S.year; });
     var yr = allYear.filter(pass);
     var own = yr.filter(function (r) { return !isSide(r[R.project]); });
-    var side = yr.filter(function (r) { return isSide(r[R.project]) && !isPrior(r[R.project]); }), prior = yr.filter(function (r) { return isPrior(r[R.project]); });
+    var side = yr.filter(function (r) { return isSide(r[R.project]) && !isPrior(r[R.project]) && !isBonus(r[R.project]) && !isOut(r[R.project]); }), prior = yr.filter(function (r) { return isPrior(r[R.project]); });
+    var bonus = yr.filter(function (r) { return isBonus(r[R.project]); }), bonusNames = {}; bonus.forEach(function (r) { bonusNames[r[R.person]] = 1; });
+    var outs = yr.filter(function (r) { return isOut(r[R.project]); });
     var codes = {}; own.forEach(function (r) { codes[r[R.project]] = 1; });
     var sideNames = {}; side.forEach(function (r) { sideNames[r[R.person]] = 1; });
     var priorNames = {}; prior.forEach(function (r) { priorNames[r[R.person]] = 1; });
@@ -730,11 +745,31 @@
         matrix(Object.keys(priorNames).sort(uk), function (n) { return prior.filter(function (r) { return r[R.person] === n; }); }, "Людина", "person") + '</div>' : "") +
       (side.length ? '<div class="block"><h2>Зароблено на стороні <small>не через ЦППР</small></h2>' +
         matrix(Object.keys(sideNames).sort(uk), function (n) { return side.filter(function (r) { return r[R.person] === n; }); }, "Людина", "person") + '</div>' : "") +
+      (bonus.length ? '<div class="block"><h2>Доплати від колег <small>частина заробленого в проєктах, яку колеги перераховують; не через ЦППР</small></h2>' +
+        matrix(Object.keys(bonusNames).sort(uk), function (n) { return bonus.filter(function (r) { return r[R.person] === n; }); }, "Людина", "person") + '</div>' : "") +
+      outBlock(outs, bonus) +
       '<div class="block"><h2>Що оплачено і що попереду</h2><div class="tw"><table class="t"><thead><tr><th>Статус</th>' +
       MSHORT.map(function (m) { return '<th>' + m + '</th>'; }).join("") + '<th>Разом</th></tr></thead><tbody>' +
       line("Оплачено", per.paid) + line("Підтверджено", per.ok) + line("План", per.plan) + '</tbody></table></div></div>' +
       notesBlock(yr) + overBlock(Object.keys(overCodes).sort(uk)) +
       '<p class="legend">Суми — виплати людям за місяцями, без інших витрат проєктів. ' + NET_NOTE + ' Клітинка з жовтим кутиком — є коментар (наведіть мишку або див. перелік «Коментарі»). Клік по заголовку стовпця — сортування.</p>';
+  }
+
+  // Передано колегам і внески: таблиця по людях і звірка (сума доплат за місяць має дорівнювати переданому колегам)
+  function outBlock(outs, bonus) {
+    if (!seesOutRows() || (!outs.length && !bonus.length)) return "";
+    var lab = {}; // «Людина — що» → рядки
+    outs.forEach(function (r) { var k = r[R.person] + " — " + (project(r[R.project]).out === "передано" ? "передано" : "внесок"); (lab[k] = lab[k] || []).push(r); });
+    var tbl = outs.length ? matrix(Object.keys(lab).sort(uk), function (k) { return lab[k]; }, "Людина — що") : "";
+    var miss = [];
+    MSHORT.forEach(function (mn, i) {
+      var b = bonus.filter(function (r) { return r[R.month] === i + 1; }).reduce(function (a, r) { return a + (r[R.sum] || 0); }, 0);
+      var g = -outs.filter(function (r) { return r[R.month] === i + 1 && project(r[R.project]).out === "передано"; }).reduce(function (a, r) { return a + (r[R.sum] || 0); }, 0);
+      if (Math.abs(b - g) > 0.5) miss.push(mn + ": доплати " + money(b) + ", передано колегам " + money(g));
+    });
+    return '<div class="block"><h2>Передано колегам і внески <small>віднімаються від суми людини; ведуться у файлі «Виплати»</small></h2>' +
+      (miss.length ? '<p class="warnline">Доплати й передане колегам не збігаються — десь записано лише з одного боку. ' + miss.join(" · ") + '</p>' : (bonus.length ? '<p class="legend" style="padding:6px 12px 0">Доплати й передане колегам за кожен місяць збігаються.</p>' : "")) +
+      (tbl || '<div class="empty">Переданого колегам і внесків за ' + S.year + ' рік не записано.</div>') + '</div>';
   }
 
   // Залучення людей за місяцями року

@@ -70,6 +70,11 @@ input.pick{width:100%}
 .tile small{display:block;color:var(--muted);font-size:12px}
 .tile b{font-size:18px;font-variant-numeric:tabular-nums}
 .tile.side{border-left:4px solid #8E6BBF}
+.tile.bonus{border-left:4px solid #2E8B57}
+.tile.out{border-left:4px solid #B0413E}
+.tile.out b{color:#9A2F2C}
+.sidetag.out{background:#FBE9E7;color:#9A2F2C}
+.warnline{margin:8px 12px 0;padding:8px 10px;border-radius:8px;background:#FFF4E5;color:#8A4B00;font-size:13px}
 .tile.prior{border-left:4px solid #1C75BC}
 .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .filters select.pick{flex:1 1 150px;min-width:0}
@@ -86,6 +91,7 @@ input.pick{width:100%}
 .dirbtns{margin-top:4px}
 .sidetag{font-size:11.5px;background:#EFE8F8;color:#5B3A8C;border-radius:6px;padding:1px 7px;font-weight:600;white-space:nowrap}
 .sidetag.prior{background:#E3EFFA;color:#1C5A8C}
+.sidetag.bonus{background:#E4F4EA;color:#1D6B3A}
 .sidenote{padding:8px 12px;font-size:13px;color:#5B3A8C;background:#F7F3FC;border-bottom:1px solid var(--line)}
 .empty.small{padding:14px 12px}
 .mm{margin-left:auto;font-size:13px;font-weight:600;color:var(--navy);background:#EEF1F8;border-radius:6px;padding:2px 8px}
@@ -256,7 +262,7 @@ table.t td.over{color:var(--bad);font-weight:700}
 </div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="app.js?v=1.8.1"></script>
+<script src="app.js?v=1.9.0"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
 </body>
 </html>
