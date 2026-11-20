@@ -1,4 +1,7 @@
 /* Фінсистема ЦППР — сторінка. Даних і адрес команди тут немає: усе приходить із сервера після входу.
+   Версія 1.10.0 — 21.11.2026: «Витрати на ЦППР» — гроші з гонорару, витрачені людиною на потреби ЦППР (завжди мінус).
+   Версія 1.9.2 — 21.11.2026: «Передано колегам» завжди мінусом; у «Внеску» знак як у файлі (плюс — повернення).
+   Версія 1.9.1 — 20.11.2026: у переданому й внесках знак як у файлі (плюс — повернення).
    Версія 1.9.0 — 20.11.2026: «Отримано фактично» — «Передано колегам» і «Внесок» віднімаються від суми людини (лише перегляд,
      ведуться у файлі «Виплати»; бачать адміни й члени правління); звірка доплат із переданим колегам у «Році».
    Версія 1.8.2 — 20.11.2026: «Доплата від колег» — окрема категорія: не через ЦППР, лише сума, без годин; у загальну суму людини
@@ -132,7 +135,9 @@
   // «З інших періодів» — виплати ЦППР за роботу в інших місяцях: як стороннє — без підтвердження й оплати і без годин залучення
   function isPrior(code) { return !!project(code).prior; }
   function isBonus(code) { return !!project(code).bonus; }
-  function isOut(code) { return !!project(code).out; }   // «передано колегам» / «внесок» — лише перегляд, з файлу «Виплати»
+  function isOut(code) { return !!project(code).out; }
+  var OUT_LABEL = { "передано": "передано колегам", "внесок": "внесок у ЦППР", "витрати": "витрати на ЦППР" };
+  function outLabel(code) { return OUT_LABEL[project(code).out] || "внесок у ЦППР"; }   // «передано колегам» / «внесок» — лише перегляд, з файлу «Виплати»
   function seesOutRows() { return D.projects.some(function (p) { return p.out; }); }
   function isLead() { return D.me.role === "board" || D.me.role === "pm"; }
   function canEditProject(code) { if (isOut(code)) return false; return canAll() || (D.me.role === "board" && (isMine(code) || isSide(code))) || (D.me.role === "pm" && isMine(code)); }
@@ -145,8 +150,8 @@
   function sum(rows) { return rows.reduce(function (a, r) { return a + (r[R.sum] || 0); }, 0); }
   // Виплати ЦППР за статусами; заробіток на стороні й виплати з інших періодів — окремо
   function byStatus(rows) {
-    var o = { plan: 0, ok: 0, paid: 0, side: 0, prior: 0, bonus: 0, given: 0, contrib: 0 };
-    rows.forEach(function (r) { var ot = project(r[R.project]).out; o[ot === "передано" ? "given" : ot ? "contrib" : isBonus(r[R.project]) ? "bonus" : isPrior(r[R.project]) ? "prior" : isSide(r[R.project]) ? "side" : (ST_CLASS[r[R.status]] || "plan")] += r[R.sum] || 0; });
+    var o = { plan: 0, ok: 0, paid: 0, side: 0, prior: 0, bonus: 0, given: 0, contrib: 0, spent: 0 };
+    rows.forEach(function (r) { var ot = project(r[R.project]).out; o[ot === "передано" ? "given" : ot === "витрати" ? "spent" : ot ? "contrib" : isBonus(r[R.project]) ? "bonus" : isPrior(r[R.project]) ? "prior" : isSide(r[R.project]) ? "side" : (ST_CLASS[r[R.status]] || "plan")] += r[R.sum] || 0; });
     return o;
   }
   function years() {
@@ -307,8 +312,9 @@
       (st.bonus ? '<div class="tile bonus"><small>Доплати від колег</small><b>' + money(st.bonus) + '</b></div>' : "") +
       (st.given ? '<div class="tile out"><small>Передано колегам</small><b>' + money(st.given) + '</b></div>' : "") +
       (st.contrib ? '<div class="tile out"><small>Внески в ЦППР</small><b>' + money(st.contrib) + '</b></div>' : "") +
-      '<div class="tile total"><small>' + (withSide && (st.given || st.contrib) ? "Отримано фактично, грн" : withSide && (st.side || st.bonus) ? "Разом зі стороннім і доплатами, грн" : "Разом через ЦППР, грн") + '</small><b>' +
-      money(cplr + (withSide ? st.side + (st.bonus || 0) + (st.given || 0) + (st.contrib || 0) : 0)) + '</b></div></div>';
+      (st.spent ? '<div class="tile out"><small>Витрати на ЦППР</small><b>' + money(st.spent) + '</b></div>' : "") +
+      '<div class="tile total"><small>' + (withSide && (st.given || st.contrib || st.spent) ? "Отримано фактично, грн" : withSide && (st.side || st.bonus) ? "Разом зі стороннім і доплатами, грн" : "Разом через ЦППР, грн") + '</small><b>' +
+      money(cplr + (withSide ? st.side + (st.bonus || 0) + (st.given || 0) + (st.contrib || 0) + (st.spent || 0) : 0)) + '</b></div></div>';
   }
   function yearSeg() {
     return '<div class="seg">' + years().map(function (y) {
@@ -333,7 +339,7 @@
     }).join("") + '</ul></div>';
   }
   function noteLabel(r, n) { return [r[R.project], r[R.person]].filter(function (x) { return x !== n; }).join(" · ") + ": " + r[R.note]; }
-  function sideTag(code) { var ot = project(code).out; if (ot) return ' <span class="sidetag out">' + (ot === "передано" ? "передано колегам" : "внесок у ЦППР") + '</span>'; return isBonus(code) ? ' <span class="sidetag bonus">доплата</span>' : isPrior(code) ? ' <span class="sidetag prior">з інших періодів</span>' : isSide(code) ? ' <span class="sidetag">на стороні</span>' : ""; }
+  function sideTag(code) { var ot = project(code).out; if (ot) return ' <span class="sidetag out">' + outLabel(code) + '</span>'; return isBonus(code) ? ' <span class="sidetag bonus">доплата</span>' : isPrior(code) ? ' <span class="sidetag prior">з інших періодів</span>' : isSide(code) ? ' <span class="sidetag">на стороні</span>' : ""; }
   // Таблиця «рядки × 12 місяців»
   // opt.rate(назва) — ставка, грн/год, окремою колонкою; opt.mark(місяць, сума) — клас для клітинки підсумку
   function matrix(names, pick, firstHead, linkAct, tag, opt) {
@@ -396,7 +402,7 @@
         (lineUse(code).over.length ? ' <button class="overtag" type="button" data-act="project" data-v="' + esc(code) + '">перевищення бюджету: ' + lineUse(code).over.length + '</button>' : "") +
         (p.leads.length ? ' <small>керівник: ' + esc(p.leads.join(", ")) + '</small>' : "") +
         '<span class="sum">' + money(sum(rows)) + '</span></h2>';
-      if (p.out) h += '<div class="sidenote">' + (p.out === "передано" ? "Частина заробленого, яку людина перерахувала колегам (у них це «Доплата»)." : "Внесок людини на рахунок ЦППР.") + ' Віднімається від суми людини — так видно, скільки вона отримала фактично. Ведеться у файлі «Виплати».</div>';
+      if (p.out) h += '<div class="sidenote">' + (p.out === "передано" ? "Частина заробленого, яку людина перерахувала колегам (у них це «Доплата»); завжди віднімається." : p.out === "витрати" ? "Гроші з гонорару, які людина сама витратила на потреби ЦППР чи проєкту (реклама, сервіси, обладнання); завжди віднімаються." : "Внесок людини на рахунок ЦППР: мінус — внесок, плюс — повернення чи доплата з цих коштів.") + ' Так видно, скільки людина отримала фактично. Ведеться у файлі «Виплати».</div>';
       else if (p.bonus) h += '<div class="sidenote">Частина заробленого колегами в проєктах, яку вони перераховують людині, що допомагала без договору в проєкті. Не через ЦППР; зараховується до загальної виплати людини й у рамки гонорару.</div>';
       else if (p.prior) h += '<div class="sidenote">Виплати за роботу в інших періодах. Зараховуються до загальної виплати людини; підтвердження й оплати тут немає.</div>';
       else if (p.side) h += '<div class="sidenote">Зароблене не через ЦППР. Зараховується до загальної виплати людини.</div>';
@@ -440,7 +446,7 @@
     var id = r[R.id], d = dirty[id], edit = canEditRow(r), side = isSide(r[R.project]), v = live(r, d);
     var bon = isBonus(r[R.project]) || isOut(r[R.project]), ex = isExpense(r[R.person]) || bon;
     var h = '<div class="row" data-id="' + id + '"><div class="who"><b>' + esc(r[R.person]) + '</b><small>' +
-      (isOut(r[R.project]) ? (project(r[R.project]).out === "передано" ? "передано колегам" : "внесок у ЦППР") : bon ? "доплата від колег, лише сума" : ex ? "витрати" : r[R.rate] ? money(r[R.rate]) + " грн/год" : "без ставки") + (r[R.kind] === "ЗП" ? ' · <span title="' + esc(NET_NOTE) + '">зарплата, чиста</span>' : "") +
+      (isOut(r[R.project]) ? outLabel(r[R.project]) : bon ? "доплата від колег, лише сума" : ex ? "витрати" : r[R.rate] ? money(r[R.rate]) + " грн/год" : "без ставки") + (r[R.kind] === "ЗП" ? ' · <span title="' + esc(NET_NOTE) + '">зарплата, чиста</span>' : "") +
       (side ? "" : ' <span class="st ' + (ST_CLASS[r[R.status]] || "plan") + '">' + esc(r[R.status]) +
         (r[R.paid] ? " " + esc(r[R.paid].slice(8, 10) + "." + r[R.paid].slice(5, 7)) : "") + '</span>') +
       lineNote(r) + '</small></div>';
@@ -759,7 +765,7 @@
   function outBlock(outs, bonus) {
     if (!seesOutRows() || (!outs.length && !bonus.length)) return "";
     var lab = {}; // «Людина — що» → рядки
-    outs.forEach(function (r) { var k = r[R.person] + " — " + (project(r[R.project]).out === "передано" ? "передано" : "внесок"); (lab[k] = lab[k] || []).push(r); });
+    outs.forEach(function (r) { var k = r[R.person] + " — " + ({ "передано": "передано", "витрати": "витрати" }[project(r[R.project]).out] || "внесок"); (lab[k] = lab[k] || []).push(r); });
     var tbl = outs.length ? matrix(Object.keys(lab).sort(uk), function (k) { return lab[k]; }, "Людина — що") : "";
     var miss = [];
     MSHORT.forEach(function (mn, i) {
@@ -767,7 +773,7 @@
       var g = -outs.filter(function (r) { return r[R.month] === i + 1 && project(r[R.project]).out === "передано"; }).reduce(function (a, r) { return a + (r[R.sum] || 0); }, 0);
       if (Math.abs(b - g) > 0.5) miss.push(mn + ": доплати " + money(b) + ", передано колегам " + money(g));
     });
-    return '<div class="block"><h2>Передано колегам і внески <small>віднімаються від суми людини; ведуться у файлі «Виплати»</small></h2>' +
+    return '<div class="block"><h2>Передано колегам, внески й витрати на ЦППР <small>віднімаються від суми людини; ведуться у файлі «Виплати»</small></h2>' +
       (miss.length ? '<p class="warnline">Доплати й передане колегам не збігаються — десь записано лише з одного боку. ' + miss.join(" · ") + '</p>' : (bonus.length ? '<p class="legend" style="padding:6px 12px 0">Доплати й передане колегам за кожен місяць збігаються.</p>' : "")) +
       (tbl || '<div class="empty">Переданого колегам і внесків за ' + S.year + ' рік не записано.</div>') + '</div>';
   }
