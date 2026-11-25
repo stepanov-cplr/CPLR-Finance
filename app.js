@@ -1,4 +1,5 @@
 /* Фінсистема ЦППР — сторінка. Даних і адрес команди тут немає: усе приходить із сервера після входу.
+   Версія 1.10.1 — 25.11.2026: у «Році» таблиця «За проєктами» — останньою (після «Перевищення бюджету»).
    Версія 1.10.0 — 21.11.2026: «Витрати на ЦППР» — гроші з гонорару, витрачені людиною на потреби ЦППР (завжди мінус).
    Версія 1.9.2 — 21.11.2026: «Передано колегам» завжди мінусом; у «Внеску» знак як у файлі (плюс — повернення).
    Версія 1.9.1 — 20.11.2026: у переданому й внесках знак як у файлі (плюс — повернення).
@@ -740,9 +741,10 @@
         '<td><b>' + money(arr.reduce(function (a, b) { return a + b; }, 0)) + '</b></td></tr>';
     }
     var overCodes = {}; own.forEach(function (r) { overCodes[r[R.project]] = 1; });
+    // 25.11.2026 (1.10.1): «За проєктами» — останньою таблицею сторінки (для керівників цікавіше по людях)
+    var projBlock = '<div class="block"><h2>За проєктами <small>' + S.year + ' рік, грн</small></h2>' +
+      matrix(Object.keys(codes).sort(uk), function (c) { return own.filter(function (r) { return r[R.project] === c; }); }, "Проєкт", "project") + '</div>';
     return '<div class="bar">' + yearSeg() + '</div>' + filterBar(allYear) + tiles(byStatus(yr)) +
-      '<div class="block"><h2>За проєктами <small>' + S.year + ' рік, грн</small></h2>' +
-      matrix(Object.keys(codes).sort(uk), function (c) { return own.filter(function (r) { return r[R.project] === c; }); }, "Проєкт", "project") + '</div>' +
       (S.fPerson ? "" : '<div class="block"><h2>За людьми <small>' + S.year + ' рік, грн, через ЦППР</small></h2>' +
         matrix(Object.keys(own.reduce(function (o, r) { o[r[R.person]] = 1; return o; }, {})).sort(uk),
           function (n) { return own.filter(function (r) { return r[R.person] === n; }); }, "Людина", "person") + '</div>') +
@@ -757,7 +759,7 @@
       '<div class="block"><h2>Що оплачено і що попереду</h2><div class="tw"><table class="t"><thead><tr><th>Статус</th>' +
       MSHORT.map(function (m) { return '<th>' + m + '</th>'; }).join("") + '<th>Разом</th></tr></thead><tbody>' +
       line("Оплачено", per.paid) + line("Підтверджено", per.ok) + line("План", per.plan) + '</tbody></table></div></div>' +
-      notesBlock(yr) + overBlock(Object.keys(overCodes).sort(uk)) +
+      notesBlock(yr) + overBlock(Object.keys(overCodes).sort(uk)) + projBlock +
       '<p class="legend">Суми — виплати людям за місяцями, без інших витрат проєктів. ' + NET_NOTE + ' Клітинка з жовтим кутиком — є коментар (наведіть мишку або див. перелік «Коментарі»). Клік по заголовку стовпця — сортування.</p>';
   }
 
