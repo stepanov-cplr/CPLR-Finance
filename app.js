@@ -1,4 +1,6 @@
 /* Фінсистема ЦППР — сторінка. Даних і адрес команди тут немає: усе приходить із сервера після входу.
+   Версія 1.11.0 — 26.11.2026: зарплату штатних (ЗП) підтверджують лише адмін (виконавчий директор) і фінанси; членам правління
+     й керівникам проєктів «Підтвердити години» її не рахує, під кнопкою — пояснення.
    Версія 1.10.1 — 25.11.2026: у «Році» таблиця «За проєктами» — останньою (після «Перевищення бюджету»).
    Версія 1.10.0 — 21.11.2026: «Витрати на ЦППР» — гроші з гонорару, витрачені людиною на потреби ЦППР (завжди мінус).
    Версія 1.9.2 — 21.11.2026: «Передано колегам» завжди мінусом; у «Внеску» знак як у файлі (плюс — повернення).
@@ -143,6 +145,9 @@
   function isLead() { return D.me.role === "board" || D.me.role === "pm"; }
   function canEditProject(code) { if (isOut(code)) return false; return canAll() || (D.me.role === "board" && (isMine(code) || isSide(code))) || (D.me.role === "pm" && isMine(code)); }
   function canEditRow(r) { if (isOut(r[R.project])) return false; return canAll() || (canEditProject(r[R.project]) && r[R.status] !== ST.paid); }
+  // Зарплату штатних (ЗП) підтверджує виконавчий директор (адмін) або фінанси — не члени правління й не керівники проєктів
+  function isSalary(r) { return r[R.kind] === "ЗП"; }
+  function canConfirmRow(r) { return canEditRow(r) && (canAll() || !isSalary(r)); }
   // коментар — і до оплаченого, якщо людина вносить години в цьому проєкті
   function canNote(r) { if (isOut(r[R.project])) return false; return canAll() || canEditProject(r[R.project]); }
 
@@ -411,12 +416,14 @@
       else h += '<div class="rowhead"><span></span><span>години</span><span>гривні</span></div>';
       rows.forEach(function (r) { h += rowHtml(r); });
       if (edit && !S.fPerson) h += addRowHtml(code, all.filter(function (r) { return r[R.project] === code; }));
-      var nPlan = p.side ? 0 : rows.filter(function (r) { return r[R.status] === ST.plan && canEditRow(r); }).length;
+      var nPlan = p.side ? 0 : rows.filter(function (r) { return r[R.status] === ST.plan && canConfirmRow(r); }).length;
       var nOk = p.side ? 0 : rows.filter(function (r) { return r[R.status] === ST.ok; }).length;
-      if ((edit && nPlan) || (canAll() && nOk)) {
+      var nSal = p.side || canAll() ? 0 : rows.filter(function (r) { return r[R.status] === ST.plan && isSalary(r); }).length;
+      if ((edit && nPlan) || (canAll() && nOk) || (edit && nSal)) {
         h += '<div class="foot">';
         if (edit && nPlan) h += '<button class="btn primary" type="button" data-act="confirm" data-v="' + esc(code) + '">' + (p.bonus ? "Підтвердити доплати" : "Підтвердити години") + ' (' + nPlan + ')</button>';
         if (canAll() && nOk) h += '<button class="btn good" type="button" data-act="pay" data-v="' + esc(code) + '">Позначити оплаченим (' + nOk + ')</button>';
+        if (edit && nSal) h += '<small class="salnote">Зарплату штатних (' + nSal + ') підтверджує виконавчий директор.</small>';
         h += '</div>';
       }
       h += '</div>';
@@ -1010,7 +1017,7 @@
     else if (act === "confirm") {
       saveDirty().then(function (ok) {
         if (!ok) return;
-        var ids = monthRows(v, ST.plan).filter(canEditRow).map(function (r) { return r[R.id]; });
+        var ids = monthRows(v, ST.plan).filter(canConfirmRow).map(function (r) { return r[R.id]; });
         if (!ids.length) return;
         run(api("confirm", { ids: ids }), "Години підтверджено").then(render);
       });
